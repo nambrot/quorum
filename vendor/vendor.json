@@ -177,6 +177,50 @@
 			"revisionTime": "2016-08-13T22:13:03Z"
 		},
 		{
+			"checksumSHA1": "laYVVZeqao4WdIS/MKd0be7Z3yA=",
+			"path": "github.com/hashicorp/vault/api",
+			"revision": "85909e3373aa743c34a6a0ab59131f61fd9e8e43",
+			"revisionTime": "2019-02-12T14:05:52Z",
+			"version": "v1.0.3",
+			"versionExact": "v1.0.3"
+		},
+		{
+			"checksumSHA1": "t62AAua2AHm41SA3pdwGPedcdKY=",
+			"path": "github.com/hashicorp/vault/helper/compressutil",
+			"revision": "f1fcc27d2d443d0dbbebc74f41060ee600c86357",
+			"revisionTime": "2019-03-07T03:09:55Z"
+		},
+		{
+			"checksumSHA1": "Cl4pkXoAAhaJkgAol9YZqYfjOhs=",
+			"path": "github.com/hashicorp/vault/helper/consts",
+			"revision": "f1fcc27d2d443d0dbbebc74f41060ee600c86357",
+			"revisionTime": "2019-03-07T03:09:55Z"
+		},
+		{
+			"checksumSHA1": "RlqPBLOexQ0jj6jomhiompWKaUg=",
+			"path": "github.com/hashicorp/vault/helper/hclutil",
+			"revision": "f1fcc27d2d443d0dbbebc74f41060ee600c86357",
+			"revisionTime": "2019-03-07T03:09:55Z"
+		},
+		{
+			"checksumSHA1": "POgkM3GrjRFw6H3sw95YNEs552A=",
+			"path": "github.com/hashicorp/vault/helper/jsonutil",
+			"revision": "f1fcc27d2d443d0dbbebc74f41060ee600c86357",
+			"revisionTime": "2019-03-07T03:09:55Z"
+		},
+		{
+			"checksumSHA1": "2BWXFt5CX+GhNu2/efxzidtwuJ8=",
+			"path": "github.com/hashicorp/vault/helper/parseutil",
+			"revision": "f1fcc27d2d443d0dbbebc74f41060ee600c86357",
+			"revisionTime": "2019-03-07T03:09:55Z"
+		},
+		{
+			"checksumSHA1": "GOE6ulwDvif+25wA6fen9h0JIv8=",
+			"path": "github.com/hashicorp/vault/helper/strutil",
+			"revision": "f1fcc27d2d443d0dbbebc74f41060ee600c86357",
+			"revisionTime": "2019-03-07T03:09:55Z"
+		},
+		{
 			"checksumSHA1": "f55gR+6YClh0i/FOhdy66SOUiwY=",
 			"path": "github.com/huin/goupnp",
 			"revision": "679507af18f3c7ba2bcc7905392ce23e148661c3",
