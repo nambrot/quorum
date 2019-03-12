@@ -7,6 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/hashicorp/vault/api"
 	"math/big"
 	"os"
@@ -35,7 +36,7 @@ type hashicorpWallet struct {
 	secrets []secretData
 	accounts []accounts.Account
 	accountsSecretMap map[accounts.Account]secretData
-	client *api.Client
+	client clientInterface
 }
 
 type clientData struct {
@@ -70,6 +71,64 @@ func newHashicorpWallet(clientData clientData, secrets []secretData) *hashicorpW
 	return hw
 }
 
+//=======================
+
+type clientInterface interface {
+	doLogical() logicalInterface
+	doSetToken(token string)
+	doClearToken()
+}
+
+type clientImpl struct {
+	*api.Client
+}
+
+func (c clientImpl) doLogical() logicalInterface {
+	return logicalImpl{c.Logical()}
+}
+
+func (c clientImpl) doSetToken(token string) {
+	c.SetToken(token)
+}
+
+func (c clientImpl) doClearToken() {
+	c.ClearToken()
+}
+
+//=======================
+
+type logicalInterface interface {
+	doReadWithData(path string, data map[string][]string) (*api.Secret, error)
+	doWrite(path string, data map[string]interface{}) (*api.Secret, error)
+}
+
+type logicalImpl struct {
+	*api.Logical
+}
+
+func (l logicalImpl) doReadWithData(path string, data map[string][]string) (*api.Secret, error) {
+	return l.ReadWithData(path, data)
+}
+
+func (l logicalImpl) doWrite(path string, data map[string]interface{}) (*api.Secret, error) {
+	return l.Write(path, data)
+}
+
+//=======================
+
+func (hw *hashicorpWallet) read(secretEngineName string, secretName string, secretVersion int) (*api.Secret, error)  {
+	path := fmt.Sprintf("%s/data/%s", secretEngineName, secretName)
+
+	queryParams := make(map[string][]string)
+	if secretVersion < 0 {
+		//TODO custom error type?
+		return nil, errors.New("Hashicorp Vault secret version must be integer >= 0")
+	}
+	queryParams["version"] = []string{strconv.Itoa(secretVersion)}
+
+	return hw.client.doLogical().doReadWithData(path, queryParams)
+}
+
 func (*hashicorpWallet) URL() accounts.URL {
 	panic("implement me")
 }
@@ -95,9 +154,10 @@ func (hw *hashicorpWallet) Open(passphrase string) error {
 
 	c := api.DefaultConfig()
 
-	var err error
-	if hw.client, err = api.NewClient(c); err != nil {
+	if cli, err := api.NewClient(c); err != nil {
 		return err
+	} else {
+		hw.client = clientImpl{cli}
 	}
 
 	// Authenticate the vault client, if Approle credentials not provided use Token
@@ -115,14 +175,14 @@ func (hw *hashicorpWallet) Open(passphrase string) error {
 
 		hw.clientData.approle = approlePath
 
-		authResponse, err := hw.client.Logical().Write(fmt.Sprintf("auth/%s/login", hw.clientData.approle), authData)
+		authResponse, err := hw.client.doLogical().doWrite(fmt.Sprintf("auth/%s/login", hw.clientData.approle), authData)
 
 		if err != nil {
 			return err
 		}
 
 		token := authResponse.Auth.ClientToken
-		hw.client.SetToken(token)
+		hw.client.doSetToken(token)
 	}
 
 	// TODO If not set manually, token is set by reading VAULT_TOKEN.  The non-approle case will only have to be explicitly handled if using CLI/file config
@@ -139,7 +199,7 @@ func (hw *hashicorpWallet) Close() error {
 		return nil
 	}
 
-	hw.client.ClearToken()
+	hw.client.doClearToken()
 	hw.client = nil
 	// What else to do here?
 
@@ -193,7 +253,7 @@ func (*hashicorpWallet) Derive(path accounts.DerivationPath, pin bool) (accounts
 
 // SelfDerive implements accounts.Wallet, but is a noop for Vault wallets since these have no notion of hierarchical account derivation.
 func (*hashicorpWallet) SelfDerive(base accounts.DerivationPath, chain ethereum.ChainStateReader) {
-	panic("implement me")
+	log.Warn("SelfDerive is not supported for Hashicorp Vault wallets")
 }
 
 func (*hashicorpWallet) SignHash(account accounts.Account, hash []byte) ([]byte, error) {
@@ -213,7 +273,6 @@ func (*hashicorpWallet) SignTxWithPassphrase(account accounts.Account, passphras
 }
 
 func (hw *hashicorpWallet) getAccount(secretData secretData) (accounts.Account, error) {
-
 	secret, err := hw.read(secretData.secretEngine, secretData.name, secretData.version)
 
 	if err != nil {
@@ -223,27 +282,22 @@ func (hw *hashicorpWallet) getAccount(secretData secretData) (accounts.Account, 
 	data := secret.Data["data"]
 
 	m := data.(map[string]interface{})
-	pubKey, err := m[secretData.publicKeyId].(string)
+	pubKey, ok := m[secretData.publicKeyId]
 
-	if err != nil {
-		return accounts.Account{}, err
+	if !ok {
+		//TODO change this error
+		return accounts.Account{}, accounts.ErrUnknownAccount
 	}
 
-	account := accounts.Account{Address: common.StringToAddress(pubKey)}
+	pk, errr := pubKey.(string)
+
+	if errr {
+		//TODO throw error as value retrieved from vault is not of type string
+	}
+
+	account := accounts.Account{Address: common.StringToAddress(pk)}
 
 	return account, nil
-}
-
-func (hw *hashicorpWallet) read(secretEngineName string, secretName string, secretVersion int) (*api.Secret, error)  {
-	path := fmt.Sprintf("%s/data/%s", secretEngineName, secretName)
-
-	queryParams := make(map[string][]string)
-	if secretVersion < 0 {
-		return nil, errors.New("Hashicorp Vault secret version must be integer >= 0")
-	}
-	queryParams["version"] = []string{strconv.Itoa(secretVersion)}
-
-	return hw.client.Logical().ReadWithData(path, queryParams)
 }
 
 func (hw *hashicorpWallet) refresh() error {
