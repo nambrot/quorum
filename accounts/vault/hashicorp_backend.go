@@ -15,8 +15,8 @@ type hashicorpBackend struct {
 }
 
 type hashicorpConfig struct {
-	clientData clientData
-	secrets []secretData
+	clientData ClientData
+	secrets []SecretData
 }
 
 func newHashicorpBackend(hashicorpConfigs []hashicorpConfig) *hashicorpBackend {
@@ -55,7 +55,7 @@ func (hb *hashicorpBackend) refreshWallets() {
 	//TODO consider not only fetching the wallets once (i.e. like in other backend impls)
 	if len(hb.wallets) == 0 {
 		for _, hc := range hb.hashicorpConfigs {
-			w := newHashicorpWallet(hc.clientData, hc.secrets)
+			w := NewHashicorpWallet(hc.clientData, hc.secrets)
 			events = append(events, accounts.WalletEvent{w, accounts.WalletArrived})
 			wallets = append(wallets, w)
 		}

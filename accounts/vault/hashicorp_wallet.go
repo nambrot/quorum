@@ -1,12 +1,14 @@
 package vault
 
 import (
+	"crypto/ecdsa"
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/hashicorp/vault/api"
 	"math/big"
@@ -21,25 +23,17 @@ const (
 	vaultApprolePath = "VAULT_APPROLE_PATH"
 )
 
-var (
-	secretEngineName = "kv"
-	secrets = []secretData {
-		{"mySecret", "kv", 0, "publicKey", "privateKey"},
-		{"tessera", "kv", 0, "publicKey", "privateKey"},
-		{"two", "kv", 0, "publicKey", "privateKey"},
-	}
-)
-
 type hashicorpWallet struct {
 	stateLock sync.RWMutex  // Protects read and write access to the wallet struct fields
-	clientData clientData
-	secrets []secretData
+	clientData ClientData
+	secrets []SecretData
 	accounts []accounts.Account
-	accountsSecretMap map[accounts.Account]secretData
+	accountsSecretMap map[common.Address]SecretData
 	client clientInterface
 }
 
-type clientData struct {
+//TODO review whether these can be kept unexported
+type ClientData struct {
 	url string
 	approle string
 	caCert string
@@ -47,7 +41,7 @@ type clientData struct {
 	clientKey string
 }
 
-type secretData struct {
+type SecretData struct {
 	name string
 	secretEngine string
 	version int
@@ -55,20 +49,23 @@ type secretData struct {
 	privateKeyId string
 }
 
-type secret struct {
-	key string
-	value string
-}
-
-func newHashicorpWallet(clientData clientData, secrets []secretData) *hashicorpWallet {
+func NewHashicorpWallet(clientData ClientData, secrets []SecretData) *hashicorpWallet {
 	hw := &hashicorpWallet{
 		clientData: clientData,
 		secrets: secrets,
 	}
 
-	hw.refresh()
+	//hw.refresh()
 
 	return hw
+}
+
+func NewClientData(url string, approle string, caCert string, clientCert string, clientKey string) ClientData {
+	return ClientData{url, approle, caCert, clientCert, clientKey}
+}
+
+func NewSecretData(name string, secretEngine string, version int, publicKeyId string, privateKeyId string) SecretData {
+	return SecretData{name, secretEngine, version, publicKeyId, privateKeyId}
 }
 
 //=======================
@@ -248,6 +245,8 @@ func (hw *hashicorpWallet) Close() error {
 
 // Account implements accounts.Wallet, returning the accounts specified in config that are stored in the vault.
 func (hw *hashicorpWallet) Accounts() []accounts.Account {
+	hw.refresh()
+
 	return hw.accounts
 }
 
@@ -300,8 +299,40 @@ func (*hashicorpWallet) SignHash(account accounts.Account, hash []byte) ([]byte,
 	panic("implement me")
 }
 
-func (*hashicorpWallet) SignTx(account accounts.Account, tx *types.Transaction, chainID *big.Int, isQuorum bool) (*types.Transaction, error) {
-	panic("implement me")
+func (hw *hashicorpWallet) SignTx(account accounts.Account, tx *types.Transaction, chainID *big.Int, isQuorum bool) (*types.Transaction, error) {
+
+	hw.stateLock.RLock()
+	defer hw.stateLock.RUnlock()
+
+	if hw.client == nil {
+		return nil, accounts.ErrWalletClosed
+	}
+
+	secretData, ok := hw.accountsSecretMap[account.Address]
+	if !ok {
+		return nil, accounts.ErrUnknownAccount
+	}
+
+	key, err := hw.getPrivateKey(secretData)
+	defer zeroKey(key)
+	if(err != nil) {
+		return &types.Transaction{}, err
+	}
+
+	// Depending on the presence of the chain ID, sign with EIP155 or homestead
+	if chainID != nil && !tx.IsPrivate() {
+		return types.SignTx(tx, types.NewEIP155Signer(chainID), key)
+	}
+	return types.SignTx(tx, types.HomesteadSigner{}, key)
+}
+
+//TODO duplicated code from keystore.go
+// zeroKey zeroes a private key in memory.
+func zeroKey(k *ecdsa.PrivateKey) {
+	b := k.D.Bits()
+	for i := range b {
+		b[i] = 0
+	}
 }
 
 func (*hashicorpWallet) SignHashWithPassphrase(account accounts.Account, passphrase string, hash []byte) ([]byte, error) {
@@ -312,7 +343,7 @@ func (*hashicorpWallet) SignTxWithPassphrase(account accounts.Account, passphras
 	panic("implement me")
 }
 
-func (hw *hashicorpWallet) getAccount(secretData secretData) (accounts.Account, error) {
+func (hw *hashicorpWallet) getAccount(secretData SecretData) (accounts.Account, error) {
 	secret, err := hw.read(secretData.secretEngine, secretData.name, secretData.version)
 
 	if err != nil {
@@ -329,10 +360,11 @@ func (hw *hashicorpWallet) getAccount(secretData secretData) (accounts.Account, 
 		return accounts.Account{}, accounts.ErrUnknownAccount
 	}
 
-	pk, errr := pubKey.(string)
+	pk, ok := pubKey.(string)
 
-	if errr {
+	if !ok {
 		//TODO throw error as value retrieved from vault is not of type string
+		panic("Retrieved key is not of type string")
 	}
 
 	account := accounts.Account{Address: common.StringToAddress(pk)}
@@ -340,10 +372,43 @@ func (hw *hashicorpWallet) getAccount(secretData secretData) (accounts.Account, 
 	return account, nil
 }
 
+func (hw *hashicorpWallet) getPrivateKey(secretData SecretData) (*ecdsa.PrivateKey, error) {
+	secret, err := hw.read(secretData.secretEngine, secretData.name, secretData.version)
+
+	if err != nil {
+		return &ecdsa.PrivateKey{}, err
+	}
+
+	data := secret.Data["data"]
+
+	m := data.(map[string]interface{})
+	k, ok := m[secretData.privateKeyId]
+
+	if !ok {
+		//TODO change this error
+		return &ecdsa.PrivateKey{}, accounts.ErrUnknownAccount
+	}
+
+	pk, ok := k.(string)
+
+	if !ok {
+		//TODO throw error as value retrieved from vault is not of type string
+	}
+	fmt.Printf("Private key: %v\n", pk)
+
+	key, err := crypto.HexToECDSA(pk)
+
+	if err != nil {
+		return &ecdsa.PrivateKey{}, err
+	}
+
+	return key, nil
+}
+
 func (hw *hashicorpWallet) refresh() error {
 	//TODO don't just overwrite, check existing accounts
-	accts := make([]accounts.Account, len(secrets))
-	acctsScrtsMap := make(map[accounts.Account]secretData)
+	accts := make([]accounts.Account, len(hw.secrets))
+	acctsScrtsMap := make(map[common.Address]SecretData)
 
 	for i, secret := range hw.secrets {
 		acct, err := hw.getAccount(secret)
@@ -353,7 +418,7 @@ func (hw *hashicorpWallet) refresh() error {
 		}
 
 		accts[i] = acct
-		acctsScrtsMap[acct] = secret
+		acctsScrtsMap[acct.Address] = secret
 	}
 
 	hw.accounts = accts
