@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/hashicorp/vault/api"
 	"math/big"
@@ -30,6 +31,7 @@ type hashicorpWallet struct {
 	accounts []accounts.Account
 	accountsSecretMap map[common.Address]SecretData
 	client clientInterface
+	updateFeed event.Feed
 }
 
 //TODO review whether these can be kept unexported
@@ -49,13 +51,12 @@ type SecretData struct {
 	privateKeyId string
 }
 
-func NewHashicorpWallet(clientData ClientData, secrets []SecretData) *hashicorpWallet {
+func NewHashicorpWallet(clientData ClientData, secrets []SecretData, updateFeed event.Feed) *hashicorpWallet {
 	hw := &hashicorpWallet{
 		clientData: clientData,
 		secrets: secrets,
+		updateFeed: updateFeed,
 	}
-
-	//hw.refresh()
 
 	return hw
 }
@@ -224,6 +225,10 @@ func (hw *hashicorpWallet) Open(passphrase string) error {
 
 	// TODO If not set manually, token is set by reading VAULT_TOKEN.  The non-approle case will only have to be explicitly handled if using CLI/file config
 
+	hw.updateFeed.Send(
+		accounts.WalletEvent{hw, accounts.WalletOpened},
+	)
+
 	return nil
 }
 
@@ -249,27 +254,6 @@ func (hw *hashicorpWallet) Accounts() []accounts.Account {
 
 	return hw.accounts
 }
-
-//// Account implements accounts.Wallet, returning the accounts specified in config that are stored in the vault
-//func (hw *hashicorpWallet) Accounts() []accounts.Account {
-//	hw.stateLock.Lock()
-//	defer hw.stateLock.Unlock()
-//
-//	accts := make([]accounts.Account, len(secrets))
-//
-//	var acct accounts.Account
-//
-//	for i, secret := range hw.secrets {
-//		account, err := hw.getAccount(secretEngineName, secret.name, secret.version)
-//		if err != nil {
-//			panic("implement me")
-//		}
-//
-//		accts[i] = account
-//	}
-//
-//	return accts
-//}
 
 // Contains implements accounts.Wallet, returning whether a particular account is managed by this wallet.
 func (hw *hashicorpWallet) Contains(account accounts.Account) bool {
@@ -314,10 +298,10 @@ func (hw *hashicorpWallet) SignTx(account accounts.Account, tx *types.Transactio
 	}
 
 	key, err := hw.getPrivateKey(secretData)
-	defer zeroKey(key)
 	if(err != nil) {
 		return &types.Transaction{}, err
 	}
+	defer zeroKey(key)
 
 	// Depending on the presence of the chain ID, sign with EIP155 or homestead
 	if chainID != nil && !tx.IsPrivate() {
@@ -393,6 +377,7 @@ func (hw *hashicorpWallet) getPrivateKey(secretData SecretData) (*ecdsa.PrivateK
 
 	if !ok {
 		//TODO throw error as value retrieved from vault is not of type string
+		panic("Not of type string")
 	}
 	fmt.Printf("Private key: %v\n", pk)
 
@@ -426,4 +411,3 @@ func (hw *hashicorpWallet) refresh() error {
 
 	return nil
 }
-
