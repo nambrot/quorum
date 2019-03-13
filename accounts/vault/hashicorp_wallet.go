@@ -75,6 +75,7 @@ func newHashicorpWallet(clientData clientData, secrets []secretData) *hashicorpW
 
 type clientInterface interface {
 	doLogical() logicalInterface
+	doSys() sysInterface
 	doSetToken(token string)
 	doClearToken()
 }
@@ -85,6 +86,10 @@ type clientImpl struct {
 
 func (c clientImpl) doLogical() logicalInterface {
 	return logicalImpl{c.Logical()}
+}
+
+func (c clientImpl) doSys() sysInterface {
+	return sysImpl{c.Sys()}
 }
 
 func (c clientImpl) doSetToken(token string) {
@@ -116,6 +121,20 @@ func (l logicalImpl) doWrite(path string, data map[string]interface{}) (*api.Sec
 
 //=======================
 
+type sysInterface interface {
+	doHealth() (*api.HealthResponse, error)
+}
+
+type sysImpl struct {
+	*api.Sys
+}
+
+func (s sysImpl) doHealth() (*api.HealthResponse, error) {
+	return s.Health()
+}
+
+//=======================
+
 func (hw *hashicorpWallet) read(secretEngineName string, secretName string, secretVersion int) (*api.Secret, error)  {
 	path := fmt.Sprintf("%s/data/%s", secretEngineName, secretName)
 
@@ -133,8 +152,29 @@ func (*hashicorpWallet) URL() accounts.URL {
 	panic("implement me")
 }
 
-func (*hashicorpWallet) Status() (string, error) {
-	panic("implement me")
+func (hw *hashicorpWallet) Status() (string, error) {
+	hw.stateLock.Lock()
+	defer hw.stateLock.Unlock()
+
+	if hw.client == nil {
+		return "Closed", nil
+	}
+
+	health, err := hw.client.doSys().doHealth()
+
+	if err != nil {
+		return "Vault unable to perform healthcheck", err
+	}
+
+	if !health.Initialized {
+		return "Vault uninitialized", fmt.Errorf("Vault health check, Initialized: %v, Sealed: %v", health.Initialized, health.Sealed)
+	}
+
+	if health.Sealed {
+		return "Vault sealed", fmt.Errorf("Vault health check, Initialized: %v, Sealed: %v", health.Initialized, health.Sealed)
+	}
+
+	return "Vault initialized and unsealed", nil
 }
 
 // Open implements accounts.Wallet, creating an authenticated Client and making it accessible to the wallet to enable vault operations.
@@ -200,7 +240,7 @@ func (hw *hashicorpWallet) Close() error {
 	}
 
 	hw.client.doClearToken()
-	hw.client = nil
+	hw.client = nil //TODO set back to defaults
 	// What else to do here?
 
 	return nil
