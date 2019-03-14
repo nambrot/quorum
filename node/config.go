@@ -19,6 +19,8 @@ package node
 import (
 	"crypto/ecdsa"
 	"fmt"
+	"github.com/ethereum/go-ethereum/accounts/usbwallet"
+	"github.com/ethereum/go-ethereum/accounts/vault"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -27,7 +29,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
-	"github.com/ethereum/go-ethereum/accounts/usbwallet"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
@@ -434,5 +435,19 @@ func makeAccountManager(conf *Config) (*accounts.Manager, string, error) {
 			backends = append(backends, trezorhub)
 		}
 	}
+
+	hashicorpConfigs := []vault.HashicorpConfig{
+		{
+			vault.NewClientData("http://localhost:8200", "", "", "", ""),
+			[]vault.SecretData{
+				vault.NewSecretData("gethKey", "kv", 0, "account", "key"),
+			},
+			true,
+		},
+	}
+
+	vaultBackend := vault.NewHashicorpBackend(hashicorpConfigs)
+	backends = append(backends, vaultBackend)
+
 	return accounts.NewManager(backends...), ephemeral, nil
 }
