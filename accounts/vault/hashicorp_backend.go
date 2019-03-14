@@ -11,15 +11,16 @@ type hashicorpBackend struct {
 	wallets []accounts.Wallet // A vault wallet contains all account keys stored in that particular vault and accessible with a particular auth token
 	updateFeed event.Feed
 	updateScope event.SubscriptionScope
-	hashicorpConfigs []hashicorpConfig
+	hashicorpConfigs []HashicorpConfig
 }
 
-type hashicorpConfig struct {
-	clientData ClientData
-	secrets []SecretData
+type HashicorpConfig struct {
+	ClientData ClientData
+	Secrets    []SecretData
+	IsUsed bool
 }
 
-func newHashicorpBackend(hashicorpConfigs []hashicorpConfig) *hashicorpBackend {
+func NewHashicorpBackend(hashicorpConfigs []HashicorpConfig) *hashicorpBackend {
 	hb := &hashicorpBackend{hashicorpConfigs: hashicorpConfigs}
 	hb.refreshWallets()
 
@@ -55,7 +56,7 @@ func (hb *hashicorpBackend) refreshWallets() {
 	//TODO consider not only fetching the wallets once (i.e. like in other backend impls)
 	if len(hb.wallets) == 0 {
 		for _, hc := range hb.hashicorpConfigs {
-			w := NewHashicorpWallet(hc.clientData, hc.secrets, hb.updateFeed)
+			w := NewHashicorpWallet(hc.ClientData, hc.Secrets, hb.updateFeed)
 			events = append(events, accounts.WalletEvent{w, accounts.WalletArrived})
 			wallets = append(wallets, w)
 		}

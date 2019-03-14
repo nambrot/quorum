@@ -22,10 +22,12 @@ const (
 	vaultRoleId = "VAULT_ROLE_ID"
 	vaultSecretId = "VAULT_SECRET_ID"
 	vaultApprolePath = "VAULT_APPROLE_PATH"
+	hashicorpScheme = "hashicorp"
 )
 
 type hashicorpWallet struct {
 	stateLock sync.RWMutex  // Protects read and write access to the wallet struct fields
+	url accounts.URL
 	clientData ClientData
 	secrets []SecretData
 	accounts []accounts.Account
@@ -36,19 +38,19 @@ type hashicorpWallet struct {
 
 //TODO review whether these can be kept unexported
 type ClientData struct {
-	url string
-	approle string
-	caCert string
-	clientCert string
-	clientKey string
+	url string `toml:",omitempty"`
+	approle string `toml:",omitempty"`
+	caCert string `toml:",omitempty"`
+	clientCert string `toml:",omitempty"`
+	clientKey string `toml:",omitempty"`
 }
 
 type SecretData struct {
-	name string
-	secretEngine string
-	version int
-	publicKeyId string
-	privateKeyId string
+	name string `toml:",omitempty"`
+	secretEngine string `toml:",omitempty"`
+	version int `toml:",omitempty"`
+	publicKeyId string `toml:",omitempty"`
+	privateKeyId string `toml:",omitempty"`
 }
 
 func NewHashicorpWallet(clientData ClientData, secrets []SecretData, updateFeed event.Feed) *hashicorpWallet {
@@ -56,6 +58,7 @@ func NewHashicorpWallet(clientData ClientData, secrets []SecretData, updateFeed 
 		clientData: clientData,
 		secrets: secrets,
 		updateFeed: updateFeed,
+		url: accounts.URL{hashicorpScheme, clientData.url},
 	}
 
 	return hw
@@ -74,6 +77,7 @@ func NewSecretData(name string, secretEngine string, version int, publicKeyId st
 type clientInterface interface {
 	doLogical() logicalInterface
 	doSys() sysInterface
+	doSetAddress(address string)
 	doSetToken(token string)
 	doClearToken()
 }
@@ -88,6 +92,10 @@ func (c clientImpl) doLogical() logicalInterface {
 
 func (c clientImpl) doSys() sysInterface {
 	return sysImpl{c.Sys()}
+}
+
+func (c clientImpl) doSetAddress(address string) {
+	c.SetAddress(address)
 }
 
 func (c clientImpl) doSetToken(token string) {
@@ -146,8 +154,8 @@ func (hw *hashicorpWallet) read(secretEngineName string, secretName string, secr
 	return hw.client.doLogical().doReadWithData(path, queryParams)
 }
 
-func (*hashicorpWallet) URL() accounts.URL {
-	panic("implement me")
+func (hw *hashicorpWallet) URL() accounts.URL {
+	return hw.url
 }
 
 func (hw *hashicorpWallet) Status() (string, error) {
@@ -197,6 +205,8 @@ func (hw *hashicorpWallet) Open(passphrase string) error {
 	} else {
 		hw.client = clientImpl{cli}
 	}
+
+	hw.client.doSetAddress(hw.clientData.url)
 
 	// Authenticate the vault client, if Approle credentials not provided use Token
 	roleId, rIdOk := os.LookupEnv(vaultRoleId)
@@ -351,9 +361,12 @@ func (hw *hashicorpWallet) getAccount(secretData SecretData) (accounts.Account, 
 		panic("Retrieved key is not of type string")
 	}
 
-	account := accounts.Account{Address: common.StringToAddress(pk)}
+	if common.IsHexAddress(pk) {
+		return accounts.Account{Address: common.HexToAddress(pk)}, nil
+	}
 
-	return account, nil
+	//TODO change error
+	return accounts.Account{}, accounts.ErrUnknownAccount
 }
 
 func (hw *hashicorpWallet) getPrivateKey(secretData SecretData) (*ecdsa.PrivateKey, error) {
