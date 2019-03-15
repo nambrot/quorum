@@ -1,50 +1,53 @@
 package vault
 
 import (
+	"errors"
 	"fmt"
 	"github.com/hashicorp/vault/api"
-	"github.com/pkg/errors"
 	"reflect"
 	"strconv"
 	"testing"
 )
 
 type clientMock struct {
-	healthResponse *api.HealthResponse
+	response *api.HealthResponse
 	err error
 }
 
-func (clientMock) doLogical() logicalInterface {
-	return logicalMock{}
-}
-
-func (c clientMock) doSys() sysInterface {
-	return sysMock{c.healthResponse, c.err}
-}
-
-func (clientMock) doSetToken(token string) {
+func (c clientMock) SetAddress(addr string) error {
 	panic("implement me")
 }
 
-func (clientMock) doClearToken() {
+func (c clientMock) SetToken(v string) {
 	panic("implement me")
+}
+
+func (c clientMock) ClearToken() {
+	panic("implement me")
+}
+
+func (clientMock) Logical() logicalI {
+	return &logicalMock{}
+}
+
+func (c clientMock) Sys() sysI {
+	return &sysMock{c.response, c.err}
 }
 
 type logicalMock struct {
-	// empty
+
 }
 
-func (logicalMock) doReadWithData(path string, data map[string][]string) (*api.Secret, error) {
-	d := make(map[string]interface{})
+func (logicalMock) Write(path string, data map[string]interface{}) (*api.Secret, error) {
+	panic("implement me")
+}
 
+func (logicalMock) ReadWithData(path string, data map[string][]string) (*api.Secret, error) {
+	d := make(map[string]interface{})
 	d["path"] = path
 	d["data"] = data
 
 	return &api.Secret{Data: d}, nil
-}
-
-func (logicalMock) doWrite(path string, data map[string]interface{}) (*api.Secret, error) {
-	panic("implement me")
 }
 
 type sysMock struct {
@@ -52,7 +55,7 @@ type sysMock struct {
 	err error
 }
 
-func (s sysMock) doHealth() (*api.HealthResponse, error) {
+func (s sysMock) Health() (*api.HealthResponse, error) {
 	return s.response, s.err
 }
 

@@ -32,7 +32,7 @@ type hashicorpWallet struct {
 	secrets []SecretData
 	accounts []accounts.Account
 	accountsSecretMap map[common.Address]SecretData
-	client clientInterface
+	client clientI
 	updateFeed event.Feed
 }
 
@@ -72,74 +72,35 @@ func NewSecretData(name string, secretEngine string, version int, publicKeyId st
 	return SecretData{name, secretEngine, version, publicKeyId, privateKeyId}
 }
 
-//=======================
-
-type clientInterface interface {
-	doLogical() logicalInterface
-	doSys() sysInterface
-	doSetAddress(address string)
-	doSetToken(token string)
-	doClearToken()
+type clientI interface {
+	Logical() logicalI
+	Sys() sysI
+	SetAddress(addr string) error
+	SetToken(v string)
+	ClearToken()
 }
 
-type clientImpl struct {
+type logicalI interface{
+	ReadWithData(path string, data map[string][]string) (*api.Secret, error)
+	Write(path string, data map[string]interface{}) (*api.Secret, error)
+}
+
+type sysI interface{
+	Health() (*api.HealthResponse, error)
+}
+
+type clientDelegate struct {
 	*api.Client
 }
 
-func (c clientImpl) doLogical() logicalInterface {
-	return logicalImpl{c.Logical()}
+func (cd clientDelegate) Logical() logicalI {
+	return cd.Client.Logical()
 }
 
-func (c clientImpl) doSys() sysInterface {
-	return sysImpl{c.Sys()}
+func (cd clientDelegate) Sys() sysI {
+	return cd.Client.Sys()
 }
 
-func (c clientImpl) doSetAddress(address string) {
-	c.SetAddress(address)
-}
-
-func (c clientImpl) doSetToken(token string) {
-	c.SetToken(token)
-}
-
-func (c clientImpl) doClearToken() {
-	c.ClearToken()
-}
-
-//=======================
-
-type logicalInterface interface {
-	doReadWithData(path string, data map[string][]string) (*api.Secret, error)
-	doWrite(path string, data map[string]interface{}) (*api.Secret, error)
-}
-
-type logicalImpl struct {
-	*api.Logical
-}
-
-func (l logicalImpl) doReadWithData(path string, data map[string][]string) (*api.Secret, error) {
-	return l.ReadWithData(path, data)
-}
-
-func (l logicalImpl) doWrite(path string, data map[string]interface{}) (*api.Secret, error) {
-	return l.Write(path, data)
-}
-
-//=======================
-
-type sysInterface interface {
-	doHealth() (*api.HealthResponse, error)
-}
-
-type sysImpl struct {
-	*api.Sys
-}
-
-func (s sysImpl) doHealth() (*api.HealthResponse, error) {
-	return s.Health()
-}
-
-//=======================
 
 func (hw *hashicorpWallet) read(secretEngineName string, secretName string, secretVersion int) (*api.Secret, error)  {
 	path := fmt.Sprintf("%s/data/%s", secretEngineName, secretName)
@@ -151,7 +112,7 @@ func (hw *hashicorpWallet) read(secretEngineName string, secretName string, secr
 	}
 	queryParams["version"] = []string{strconv.Itoa(secretVersion)}
 
-	return hw.client.doLogical().doReadWithData(path, queryParams)
+	return hw.client.Logical().ReadWithData(path, queryParams)
 }
 
 func (hw *hashicorpWallet) URL() accounts.URL {
@@ -166,7 +127,7 @@ func (hw *hashicorpWallet) Status() (string, error) {
 		return "Closed", nil
 	}
 
-	health, err := hw.client.doSys().doHealth()
+	health, err := hw.client.Sys().Health()
 
 	if err != nil {
 		return "Vault unable to perform healthcheck", err
@@ -203,10 +164,10 @@ func (hw *hashicorpWallet) Open(passphrase string) error {
 	if cli, err := api.NewClient(c); err != nil {
 		return err
 	} else {
-		hw.client = clientImpl{cli}
+		hw.client = clientDelegate{cli}
 	}
 
-	hw.client.doSetAddress(hw.clientData.url)
+	hw.client.SetAddress(hw.clientData.url)
 
 	// Authenticate the vault client, if Approle credentials not provided use Token
 	roleId, rIdOk := os.LookupEnv(vaultRoleId)
@@ -223,14 +184,14 @@ func (hw *hashicorpWallet) Open(passphrase string) error {
 
 		hw.clientData.approle = approlePath
 
-		authResponse, err := hw.client.doLogical().doWrite(fmt.Sprintf("auth/%s/login", hw.clientData.approle), authData)
+		authResponse, err := hw.client.Logical().Write(fmt.Sprintf("auth/%s/login", hw.clientData.approle), authData)
 
 		if err != nil {
 			return err
 		}
 
 		token := authResponse.Auth.ClientToken
-		hw.client.doSetToken(token)
+		hw.client.SetToken(token)
 	}
 
 	// TODO If not set manually, token is set by reading VAULT_TOKEN.  The non-approle case will only have to be explicitly handled if using CLI/file config
@@ -251,7 +212,7 @@ func (hw *hashicorpWallet) Close() error {
 		return nil
 	}
 
-	hw.client.doClearToken()
+	hw.client.ClearToken()
 	hw.client = nil //TODO set back to defaults
 	// What else to do here?
 
