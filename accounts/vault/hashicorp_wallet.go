@@ -289,8 +289,26 @@ func (*hashicorpWallet) SelfDerive(base accounts.DerivationPath, chain ethereum.
 	log.Warn("SelfDerive is not supported for Hashicorp Vault wallets")
 }
 
-func (*hashicorpWallet) SignHash(account accounts.Account, hash []byte) ([]byte, error) {
-	panic("implement me")
+func (hw *hashicorpWallet) SignHash(account accounts.Account, hash []byte) ([]byte, error) {
+	hw.stateLock.RLock()
+	defer hw.stateLock.RUnlock()
+
+	if hw.client == nil {
+		return nil, accounts.ErrWalletClosed
+	}
+
+	secretData, ok := hw.accountsSecretMap[account.Address]
+	if !ok {
+		return nil, accounts.ErrUnknownAccount
+	}
+
+	key, err := hw.getPrivateKey(secretData)
+	if(err != nil) {
+		return nil, err
+	}
+	defer zeroKey(key)
+
+	return crypto.Sign(hash, key)
 }
 
 func (hw *hashicorpWallet) SignTx(account accounts.Account, tx *types.Transaction, chainID *big.Int, isQuorum bool) (*types.Transaction, error) {
@@ -309,7 +327,7 @@ func (hw *hashicorpWallet) SignTx(account accounts.Account, tx *types.Transactio
 
 	key, err := hw.getPrivateKey(secretData)
 	if(err != nil) {
-		return &types.Transaction{}, err
+		return nil, err
 	}
 	defer zeroKey(key)
 
@@ -329,12 +347,12 @@ func zeroKey(k *ecdsa.PrivateKey) {
 	}
 }
 
-func (*hashicorpWallet) SignHashWithPassphrase(account accounts.Account, passphrase string, hash []byte) ([]byte, error) {
-	panic("implement me")
+func (hw *hashicorpWallet) SignHashWithPassphrase(account accounts.Account, passphrase string, hash []byte) ([]byte, error) {
+	return hw.SignHash(account, hash)
 }
 
-func (*hashicorpWallet) SignTxWithPassphrase(account accounts.Account, passphrase string, tx *types.Transaction, chainID *big.Int) (*types.Transaction, error) {
-	panic("implement me")
+func (hw *hashicorpWallet) SignTxWithPassphrase(account accounts.Account, passphrase string, tx *types.Transaction, chainID *big.Int) (*types.Transaction, error) {
+	return hw.SignTx(account, tx, chainID, true)
 }
 
 func (hw *hashicorpWallet) getAccount(secretData SecretData) (accounts.Account, error) {
