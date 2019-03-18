@@ -438,17 +438,10 @@ func makeAccountManager(conf *Config) (*accounts.Manager, string, error) {
 		}
 	}
 
-	hashicorpConfigs := []vault.HashicorpConfig{
-		{
-			vault.NewClientData("http://localhost:8200", "", "", "", ""),
-			[]vault.SecretData{
-				vault.NewSecretData("gethKey", "kv", 0, "account", "key"),
-			},
-		},
+	if conf.Vaults != nil {
+		vaultBackend := vault.NewHashicorpBackend(conf.Vaults)
+		backends = append(backends, vaultBackend)
 	}
-
-	vaultBackend := vault.NewHashicorpBackend(hashicorpConfigs)
-	backends = append(backends, vaultBackend)
 
 	return accounts.NewManager(backends...), ephemeral, nil
 }
