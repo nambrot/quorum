@@ -2,6 +2,8 @@ package vault
 
 import (
 	"crypto/ecdsa"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum"
@@ -12,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/hashicorp/vault/api"
+	"io"
 	"math/big"
 	"os"
 	"strconv"
@@ -54,10 +57,18 @@ type SecretData struct {
 }
 
 func NewHashicorpWallet(clientData ClientData, secrets []SecretData, updateFeed event.Feed) *hashicorpWallet {
+	hw := newHashicorpWallet(clientData, secrets)
+	hw.updateFeed = updateFeed
+
+	return hw
+}
+
+// TODO revisit comment
+// separate method so that it can be used to create full wallet and for geth account new
+func newHashicorpWallet(clientData ClientData, secrets []SecretData) *hashicorpWallet {
 	hw := &hashicorpWallet{
 		clientData: clientData,
 		secrets: secrets,
-		updateFeed: updateFeed,
 		url: accounts.URL{hashicorpScheme, clientData.Url},
 	}
 
@@ -122,6 +133,8 @@ func (hw *hashicorpWallet) URL() accounts.URL {
 func (hw *hashicorpWallet) Status() (string, error) {
 	hw.stateLock.Lock()
 	defer hw.stateLock.Unlock()
+
+	// TODO const values for statuses
 
 	if hw.client == nil {
 		return "Closed", nil
@@ -299,15 +312,6 @@ func (hw *hashicorpWallet) SignTx(account accounts.Account, tx *types.Transactio
 	return types.SignTx(tx, types.HomesteadSigner{}, key)
 }
 
-//TODO duplicated code from keystore.go
-// zeroKey zeroes a private key in memory.
-func zeroKey(k *ecdsa.PrivateKey) {
-	b := k.D.Bits()
-	for i := range b {
-		b[i] = 0
-	}
-}
-
 func (hw *hashicorpWallet) SignHashWithPassphrase(account accounts.Account, passphrase string, hash []byte) ([]byte, error) {
 	return hw.SignHash(account, hash)
 }
@@ -402,4 +406,68 @@ func (hw *hashicorpWallet) refresh() error {
 	hw.accountsSecretMap = acctsScrtsMap
 
 	return nil
+}
+
+//TODO duplicated code from keystore.go
+// zeroKey zeroes a private key in memory.
+func zeroKey(k *ecdsa.PrivateKey) {
+	b := k.D.Bits()
+	for i := range b {
+		b[i] = 0
+	}
+}
+
+func GenerateAndStore(config HashicorpConfig) (common.Address, error) {
+	hw := newHashicorpWallet(config.ClientData, config.Secrets)
+	hw.Open("")
+
+	if status, err := hw.Status(); err != nil {
+		return common.Address{}, err
+	} else if status == "Closed" {
+		return common.Address{}, fmt.Errorf("error creating Vault client")
+	}
+
+	key, err := generateKey(rand.Reader)
+	if err != nil {
+		return common.Address{}, err
+	}
+	defer zeroKey(key)
+
+	address, err := hw.storeKey(key)
+	if err != nil {
+		return common.Address{}, err
+	}
+
+	return address, nil
+}
+
+func generateKey(r io.Reader) (*ecdsa.PrivateKey, error) {
+	privateKeyECDSA, err := ecdsa.GenerateKey(crypto.S256(), r)
+	if err != nil {
+		return nil, err
+	}
+	return privateKeyECDSA, nil
+}
+
+func (hw *hashicorpWallet) storeKey(key *ecdsa.PrivateKey) (common.Address, error) {
+	address := crypto.PubkeyToAddress(key.PublicKey)
+
+	bytes := crypto.FromECDSA(key)
+	privKey := hex.EncodeToString(bytes)
+
+	s := hw.secrets[0]
+
+	path := fmt.Sprintf("%s/data/%s", s.SecretEngine, s.Name)
+
+	data := make(map[string]interface{})
+	data["data"] = map[string]interface{}{
+		s.PublicKeyId : address,
+		s.PrivateKeyId: privKey,
+	}
+
+	if _, err := hw.client.Logical().Write(path, data); err != nil {
+		return common.Address{}, err
+	}
+
+	return address, nil
 }

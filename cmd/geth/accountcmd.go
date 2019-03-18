@@ -18,6 +18,8 @@ package main
 
 import (
 	"fmt"
+	"github.com/ethereum/go-ethereum/accounts/vault"
+	"github.com/ethereum/go-ethereum/common"
 	"io/ioutil"
 
 	"github.com/ethereum/go-ethereum/accounts"
@@ -310,21 +312,33 @@ func accountCreate(ctx *cli.Context) error {
 		}
 	}
 	utils.SetNodeConfig(ctx, &cfg.Node)
-	scryptN, scryptP, keydir, err := cfg.Node.AccountConfig()
 
-	if err != nil {
-		utils.Fatalf("Failed to read configuration: %v", err)
+	var address common.Address
+	var error error
+
+	if(ctx.GlobalBool(utils.VaultFlag.Name)) {
+		address, error = createAcctInVault(cfg.Node.Vaults[0])
+	} else {
+		scryptN, scryptP, keydir, err := cfg.Node.AccountConfig()
+
+		if err != nil {
+			utils.Fatalf("Failed to read configuration: %v", err)
+		}
+
+		password := getPassPhrase("Your new account is locked with a password. Please give a password. Do not forget this password.", true, 0, utils.MakePasswordList(ctx))
+
+		address, error = keystore.StoreKey(keydir, password, scryptN, scryptP)
 	}
 
-	password := getPassPhrase("Your new account is locked with a password. Please give a password. Do not forget this password.", true, 0, utils.MakePasswordList(ctx))
-
-	address, err := keystore.StoreKey(keydir, password, scryptN, scryptP)
-
-	if err != nil {
-		utils.Fatalf("Failed to create account: %v", err)
+	if error != nil {
+		utils.Fatalf("Failed to create account: %v", error)
 	}
 	fmt.Printf("Address: {%x}\n", address)
 	return nil
+}
+
+func createAcctInVault(cfg vault.HashicorpConfig) (common.Address, error) {
+	return vault.GenerateAndStore(cfg)
 }
 
 // accountUpdate transitions an account from a previous format to the current

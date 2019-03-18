@@ -1028,6 +1028,44 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 	if ctx.GlobalIsSet(NoUSBFlag.Name) {
 		cfg.NoUSB = ctx.GlobalBool(NoUSBFlag.Name)
 	}
+	if ctx.GlobalBool(VaultFlag.Name) {
+		setVault(ctx, cfg)
+	}
+
+}
+
+// setVault uses CLI options to set the config for a single Vault with a single key
+func setVault(ctx *cli.Context, cfg *node.Config) {
+	if ctx.GlobalIsSet(VaultUrlFlag.Name) {
+		cfg.Vaults[0].ClientData.Url = ctx.GlobalString(VaultUrlFlag.Name)
+	}
+	if ctx.GlobalIsSet(VaultApproleFlag.Name) {
+		cfg.Vaults[0].ClientData.Approle = ctx.GlobalString(VaultApproleFlag.Name)
+	}
+	if ctx.GlobalIsSet(VaultClientCertFlag.Name) {
+		cfg.Vaults[0].ClientData.ClientCert = ctx.GlobalString(VaultClientCertFlag.Name)
+	}
+	if ctx.GlobalIsSet(VaultClientKeyFlag.Name) {
+		cfg.Vaults[0].ClientData.ClientKey = ctx.GlobalString(VaultClientKeyFlag.Name)
+	}
+	if ctx.GlobalIsSet(VaultCaCertFlag.Name) {
+		cfg.Vaults[0].ClientData.CaCert = ctx.GlobalString(VaultCaCertFlag.Name)
+	}
+	if ctx.GlobalIsSet(VaultSecretNameFlag.Name) {
+		cfg.Vaults[0].Secrets[0].Name = ctx.GlobalString(VaultSecretNameFlag.Name)
+	}
+	if ctx.GlobalIsSet(VaultSecretEngineFlag.Name) {
+		cfg.Vaults[0].Secrets[0].SecretEngine = ctx.GlobalString(VaultSecretEngineFlag.Name)
+	}
+	if ctx.GlobalIsSet(VaultSecretVersionFlag.Name) {
+		cfg.Vaults[0].Secrets[0].Version = ctx.GlobalInt(VaultSecretVersionFlag.Name)
+	}
+	if ctx.GlobalIsSet(VaultSecretPublicKeyIdFlag.Name) {
+		cfg.Vaults[0].Secrets[0].PublicKeyId = ctx.GlobalString(VaultSecretPublicKeyIdFlag.Name)
+	}
+	if ctx.GlobalIsSet(VaultSecretPrivateKeyIdFlag.Name) {
+		cfg.Vaults[0].Secrets[0].PrivateKeyId = ctx.GlobalString(VaultSecretPrivateKeyIdFlag.Name)
+	}
 }
 
 func setGPO(ctx *cli.Context, cfg *gasprice.Config) {
