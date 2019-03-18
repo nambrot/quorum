@@ -128,6 +128,50 @@ var (
 		Name:  "nousb",
 		Usage: "Disables monitoring for and managing USB hardware wallets",
 	}
+	VaultFlag = cli.BoolFlag{
+		Name: "vault",
+		Usage: "TODO",
+	}
+	VaultUrlFlag = cli.StringFlag{
+		Name:  "vaulturl",
+		Usage: "TODO",
+	}
+	VaultApproleFlag = cli.StringFlag{
+		Name:  "vaultapprole",
+		Usage: "TODO",
+	}
+	VaultClientCertFlag = cli.StringFlag{
+		Name:  "vaultclientcert",
+		Usage: "TODO",
+	}
+	VaultClientKeyFlag = cli.StringFlag{
+		Name:  "vaultclientkey",
+		Usage: "TODO",
+	}
+	VaultCaCertFlag = cli.StringFlag{
+		Name:  "vaultcacert",
+		Usage: "TODO",
+	}
+	VaultSecretNameFlag = cli.StringFlag{
+		Name:  "vaultsecretname",
+		Usage: "TODO",
+	}
+	VaultSecretEngineFlag = cli.StringFlag{
+		Name:  "vaultsecretengine",
+		Usage: "TODO",
+	}
+	VaultSecretVersionFlag = cli.StringFlag{
+		Name:  "vaultsecretversion",
+		Usage: "TODO",
+	}
+	VaultSecretPublicKeyIdFlag = cli.StringFlag{
+		Name:  "vaultsecretpublickeyid",
+		Usage: "TODO",
+	}
+	VaultSecretPrivateKeyIdFlag = cli.StringFlag{
+		Name:  "vaultsecretprivatekeyid",
+		Usage: "TODO",
+	}
 	NetworkIdFlag = cli.Uint64Flag{
 		Name:  "networkid",
 		Usage: "Network identifier (integer, 1=Frontier, 2=Morden (disused), 3=Ropsten, 4=Rinkeby, 5=Ottoman)",
