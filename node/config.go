@@ -79,6 +79,8 @@ type Config struct {
 	// is created by New and destroyed when the node is stopped.
 	KeyStoreDir string `toml:",omitempty"`
 
+	Vaults []vault.HashicorpConfig `toml:",omitempty"`
+
 	// UseLightweightKDF lowers the memory and CPU requirements of the key store
 	// scrypt KDF at the expense of security.
 	UseLightweightKDF bool `toml:",omitempty"`
@@ -442,7 +444,6 @@ func makeAccountManager(conf *Config) (*accounts.Manager, string, error) {
 			[]vault.SecretData{
 				vault.NewSecretData("gethKey", "kv", 0, "account", "key"),
 			},
-			true,
 		},
 	}
 

@@ -38,19 +38,19 @@ type hashicorpWallet struct {
 
 //TODO review whether these can be kept unexported
 type ClientData struct {
-	url string `toml:",omitempty"`
-	approle string `toml:",omitempty"`
-	caCert string `toml:",omitempty"`
-	clientCert string `toml:",omitempty"`
-	clientKey string `toml:",omitempty"`
+	Url        string `toml:",omitempty"`
+	Approle    string `toml:",omitempty"`
+	CaCert     string `toml:",omitempty"`
+	ClientCert string `toml:",omitempty"`
+	ClientKey  string `toml:",omitempty"`
 }
 
 type SecretData struct {
-	name string `toml:",omitempty"`
-	secretEngine string `toml:",omitempty"`
-	version int `toml:",omitempty"`
-	publicKeyId string `toml:",omitempty"`
-	privateKeyId string `toml:",omitempty"`
+	Name         string `toml:",omitempty"`
+	SecretEngine string `toml:",omitempty"`
+	Version      int    `toml:",omitempty"`
+	PublicKeyId  string `toml:",omitempty"`
+	PrivateKeyId string `toml:",omitempty"`
 }
 
 func NewHashicorpWallet(clientData ClientData, secrets []SecretData, updateFeed event.Feed) *hashicorpWallet {
@@ -58,7 +58,7 @@ func NewHashicorpWallet(clientData ClientData, secrets []SecretData, updateFeed 
 		clientData: clientData,
 		secrets: secrets,
 		updateFeed: updateFeed,
-		url: accounts.URL{hashicorpScheme, clientData.url},
+		url: accounts.URL{hashicorpScheme, clientData.Url},
 	}
 
 	return hw
@@ -167,7 +167,7 @@ func (hw *hashicorpWallet) Open(passphrase string) error {
 		hw.client = clientDelegate{cli}
 	}
 
-	hw.client.SetAddress(hw.clientData.url)
+	hw.client.SetAddress(hw.clientData.Url)
 
 	// Authenticate the vault client, if Approle credentials not provided use Token
 	roleId, rIdOk := os.LookupEnv(vaultRoleId)
@@ -182,9 +182,9 @@ func (hw *hashicorpWallet) Open(passphrase string) error {
 			approlePath = "approle"
 		}
 
-		hw.clientData.approle = approlePath
+		hw.clientData.Approle = approlePath
 
-		authResponse, err := hw.client.Logical().Write(fmt.Sprintf("auth/%s/login", hw.clientData.approle), authData)
+		authResponse, err := hw.client.Logical().Write(fmt.Sprintf("auth/%s/login", hw.clientData.Approle), authData)
 
 		if err != nil {
 			return err
@@ -317,7 +317,7 @@ func (hw *hashicorpWallet) SignTxWithPassphrase(account accounts.Account, passph
 }
 
 func (hw *hashicorpWallet) getAccount(secretData SecretData) (accounts.Account, error) {
-	secret, err := hw.read(secretData.secretEngine, secretData.name, secretData.version)
+	secret, err := hw.read(secretData.SecretEngine, secretData.Name, secretData.Version)
 
 	if err != nil {
 		return accounts.Account{}, err
@@ -326,7 +326,7 @@ func (hw *hashicorpWallet) getAccount(secretData SecretData) (accounts.Account, 
 	data := secret.Data["data"]
 
 	m := data.(map[string]interface{})
-	pubKey, ok := m[secretData.publicKeyId]
+	pubKey, ok := m[secretData.PublicKeyId]
 
 	if !ok {
 		//TODO change this error
@@ -349,7 +349,7 @@ func (hw *hashicorpWallet) getAccount(secretData SecretData) (accounts.Account, 
 }
 
 func (hw *hashicorpWallet) getPrivateKey(secretData SecretData) (*ecdsa.PrivateKey, error) {
-	secret, err := hw.read(secretData.secretEngine, secretData.name, secretData.version)
+	secret, err := hw.read(secretData.SecretEngine, secretData.Name, secretData.Version)
 
 	if err != nil {
 		return &ecdsa.PrivateKey{}, err
@@ -358,7 +358,7 @@ func (hw *hashicorpWallet) getPrivateKey(secretData SecretData) (*ecdsa.PrivateK
 	data := secret.Data["data"]
 
 	m := data.(map[string]interface{})
-	k, ok := m[secretData.privateKeyId]
+	k, ok := m[secretData.PrivateKeyId]
 
 	if !ok {
 		//TODO change this error

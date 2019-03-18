@@ -15,9 +15,8 @@ type hashicorpBackend struct {
 }
 
 type HashicorpConfig struct {
-	ClientData ClientData
-	Secrets    []SecretData
-	IsUsed bool
+	ClientData ClientData `toml:"Client,omitempty"`
+	Secrets    []SecretData `toml:"Secrets,omitempty"`
 }
 
 func NewHashicorpBackend(hashicorpConfigs []HashicorpConfig) *hashicorpBackend {
