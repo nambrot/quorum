@@ -120,7 +120,6 @@ Print a short summary of all accounts`,
 					utils.VaultCaCertFlag,
 					utils.VaultSecretNameFlag,
 					utils.VaultSecretEngineFlag,
-					utils.VaultSecretVersionFlag,
 					utils.VaultSecretPublicKeyIdFlag,
 					utils.VaultSecretPrivateKeyIdFlag,
 				},
@@ -316,7 +315,8 @@ func accountCreate(ctx *cli.Context) error {
 	var address common.Address
 	var error error
 
-	if(ctx.GlobalBool(utils.VaultFlag.Name)) {
+	//using local bool (not global) here as Vault CLI options are currently only defined on accountcmd
+	if(ctx.Bool(utils.VaultFlag.Name)) {
 		address, error = createAcctInVault(cfg.Node.Vaults[0])
 	} else {
 		scryptN, scryptP, keydir, err := cfg.Node.AccountConfig()

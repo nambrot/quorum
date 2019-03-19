@@ -20,6 +20,7 @@ package utils
 import (
 	"crypto/ecdsa"
 	"fmt"
+	"github.com/ethereum/go-ethereum/accounts/vault"
 	"io/ioutil"
 	"math/big"
 	"os"
@@ -1028,7 +1029,8 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 	if ctx.GlobalIsSet(NoUSBFlag.Name) {
 		cfg.NoUSB = ctx.GlobalBool(NoUSBFlag.Name)
 	}
-	if ctx.GlobalBool(VaultFlag.Name) {
+
+	if ctx.Bool(VaultFlag.Name) {
 		setVault(ctx, cfg)
 	}
 
@@ -1036,36 +1038,43 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 
 // setVault uses CLI options to set the config for a single Vault with a single key
 func setVault(ctx *cli.Context, cfg *node.Config) {
-	if ctx.GlobalIsSet(VaultUrlFlag.Name) {
-		cfg.Vaults[0].ClientData.Url = ctx.GlobalString(VaultUrlFlag.Name)
+	c := vault.ClientData{}
+	s := make([]vault.SecretData, 1)
+	s[0] = vault.SecretData{}
+
+	if ctx.IsSet(VaultUrlFlag.Name) {
+		c.Url = ctx.String(VaultUrlFlag.Name)
 	}
-	if ctx.GlobalIsSet(VaultApproleFlag.Name) {
-		cfg.Vaults[0].ClientData.Approle = ctx.GlobalString(VaultApproleFlag.Name)
+	if ctx.IsSet(VaultApproleFlag.Name) {
+		c.Approle = ctx.String(VaultApproleFlag.Name)
 	}
-	if ctx.GlobalIsSet(VaultClientCertFlag.Name) {
-		cfg.Vaults[0].ClientData.ClientCert = ctx.GlobalString(VaultClientCertFlag.Name)
+	if ctx.IsSet(VaultClientCertFlag.Name) {
+		c.ClientCert = ctx.String(VaultClientCertFlag.Name)
 	}
-	if ctx.GlobalIsSet(VaultClientKeyFlag.Name) {
-		cfg.Vaults[0].ClientData.ClientKey = ctx.GlobalString(VaultClientKeyFlag.Name)
+	if ctx.IsSet(VaultClientKeyFlag.Name) {
+		c.ClientKey = ctx.String(VaultClientKeyFlag.Name)
 	}
-	if ctx.GlobalIsSet(VaultCaCertFlag.Name) {
-		cfg.Vaults[0].ClientData.CaCert = ctx.GlobalString(VaultCaCertFlag.Name)
+	if ctx.IsSet(VaultCaCertFlag.Name) {
+		c.CaCert = ctx.String(VaultCaCertFlag.Name)
 	}
-	if ctx.GlobalIsSet(VaultSecretNameFlag.Name) {
-		cfg.Vaults[0].Secrets[0].Name = ctx.GlobalString(VaultSecretNameFlag.Name)
+	if ctx.IsSet(VaultSecretNameFlag.Name) {
+		s[0].Name = ctx.String(VaultSecretNameFlag.Name)
 	}
-	if ctx.GlobalIsSet(VaultSecretEngineFlag.Name) {
-		cfg.Vaults[0].Secrets[0].SecretEngine = ctx.GlobalString(VaultSecretEngineFlag.Name)
+	if ctx.IsSet(VaultSecretEngineFlag.Name) {
+		s[0].SecretEngine = ctx.String(VaultSecretEngineFlag.Name)
 	}
-	if ctx.GlobalIsSet(VaultSecretVersionFlag.Name) {
-		cfg.Vaults[0].Secrets[0].Version = ctx.GlobalInt(VaultSecretVersionFlag.Name)
+	if ctx.IsSet(VaultSecretVersionFlag.Name) {
+		s[0].Version = ctx.Int(VaultSecretVersionFlag.Name)
 	}
-	if ctx.GlobalIsSet(VaultSecretPublicKeyIdFlag.Name) {
-		cfg.Vaults[0].Secrets[0].PublicKeyId = ctx.GlobalString(VaultSecretPublicKeyIdFlag.Name)
+	if ctx.IsSet(VaultSecretPublicKeyIdFlag.Name) {
+		s[0].PublicKeyId = ctx.String(VaultSecretPublicKeyIdFlag.Name)
 	}
-	if ctx.GlobalIsSet(VaultSecretPrivateKeyIdFlag.Name) {
-		cfg.Vaults[0].Secrets[0].PrivateKeyId = ctx.GlobalString(VaultSecretPrivateKeyIdFlag.Name)
+	if ctx.IsSet(VaultSecretPrivateKeyIdFlag.Name) {
+		s[0].PrivateKeyId = ctx.String(VaultSecretPrivateKeyIdFlag.Name)
 	}
+
+	cfg.Vaults = make([]vault.HashicorpConfig, 1)
+	cfg.Vaults[0] = vault.HashicorpConfig{ClientData: c, Secrets: s}
 }
 
 func setGPO(ctx *cli.Context, cfg *gasprice.Config) {
