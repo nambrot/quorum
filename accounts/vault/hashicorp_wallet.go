@@ -18,6 +18,7 @@ import (
 	"math/big"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -451,9 +452,14 @@ func generateKey(r io.Reader) (*ecdsa.PrivateKey, error) {
 
 func (hw *hashicorpWallet) storeKey(key *ecdsa.PrivateKey) (common.Address, error) {
 	address := crypto.PubkeyToAddress(key.PublicKey)
+	addrHex := address.Hex()
 
-	bytes := crypto.FromECDSA(key)
-	privKey := hex.EncodeToString(bytes)
+	if strings.HasPrefix(addrHex, "0x") {
+		addrHex = strings.Replace(addrHex, "0x", "", 1)
+	}
+
+	keyBytes := crypto.FromECDSA(key)
+	keyHex := hex.EncodeToString(keyBytes)
 
 	s := hw.secrets[0]
 
@@ -461,8 +467,8 @@ func (hw *hashicorpWallet) storeKey(key *ecdsa.PrivateKey) (common.Address, erro
 
 	data := make(map[string]interface{})
 	data["data"] = map[string]interface{}{
-		s.PublicKeyId : address,
-		s.PrivateKeyId: privKey,
+		s.PublicKeyId : addrHex,
+		s.PrivateKeyId: keyHex,
 	}
 
 	if _, err := hw.client.Logical().Write(path, data); err != nil {
