@@ -40,7 +40,6 @@ type hashicorpWallet struct {
 	updateFeed event.Feed
 }
 
-//TODO review whether these can be kept unexported
 type ClientData struct {
 	Url        string `toml:",omitempty"`
 	Approle    string `toml:",omitempty"`
@@ -57,31 +56,43 @@ type SecretData struct {
 	PrivateKeyId string `toml:",omitempty"`
 }
 
-func NewHashicorpWallet(clientData ClientData, secrets []SecretData, updateFeed event.Feed) *hashicorpWallet {
-	hw := newHashicorpWallet(clientData, secrets)
+func (s SecretData) readData() (string, map[string][]string, error) {
+
+	path := fmt.Sprintf("%s/data/%s", s.SecretEngine, s.Name)
+
+	queryParams := make(map[string][]string)
+	if s.Version < 0 {
+		//TODO custom error type?
+		return "", nil, fmt.Errorf("Hashicorp Vault secret version must be integer >= 0")
+	}
+	queryParams["version"] = []string{strconv.Itoa(s.Version)}
+
+	return path, queryParams, nil
+}
+
+func NewHashicorpWallet(clientData ClientData, secrets []SecretData, updateFeed event.Feed) (*hashicorpWallet, error) {
+	hw, err := newHashicorpWallet(clientData, secrets)
 	hw.updateFeed = updateFeed
 
-	return hw
+	return hw, err
 }
 
 // TODO revisit comment
 // separate method so that it can be used to create full wallet and for geth account new
-func newHashicorpWallet(clientData ClientData, secrets []SecretData) *hashicorpWallet {
+func newHashicorpWallet(clientData ClientData, secrets []SecretData) (*hashicorpWallet, error) {
+	url, err := parseURL(clientData.Url)
+
+	if err != nil {
+		return &hashicorpWallet{}, err
+	}
+
 	hw := &hashicorpWallet{
 		clientData: clientData,
 		secrets: secrets,
-		url: accounts.URL{hashicorpScheme, clientData.Url},
+		url: url,
 	}
 
-	return hw
-}
-
-func NewClientData(url string, approle string, caCert string, clientCert string, clientKey string) ClientData {
-	return ClientData{url, approle, caCert, clientCert, clientKey}
-}
-
-func NewSecretData(name string, secretEngine string, version int, publicKeyId string, privateKeyId string) SecretData {
-	return SecretData{name, secretEngine, version, publicKeyId, privateKeyId}
+	return hw, nil
 }
 
 type clientI interface {
@@ -113,49 +124,41 @@ func (cd clientDelegate) Sys() sysI {
 	return cd.Client.Sys()
 }
 
-
-func (hw *hashicorpWallet) read(secretEngineName string, secretName string, secretVersion int) (*api.Secret, error)  {
-	path := fmt.Sprintf("%s/data/%s", secretEngineName, secretName)
-
-	queryParams := make(map[string][]string)
-	if secretVersion < 0 {
-		//TODO custom error type?
-		return nil, errors.New("Hashicorp Vault secret version must be integer >= 0")
-	}
-	queryParams["version"] = []string{strconv.Itoa(secretVersion)}
-
-	return hw.client.Logical().ReadWithData(path, queryParams)
-}
-
 func (hw *hashicorpWallet) URL() accounts.URL {
 	return hw.url
 }
+
+const (
+	walletClosed = "Closed"
+	vaultUninitialised = "Vault uninitialised"
+	vaultSealed = "Vault sealed"
+	healthcheckFailed = "Vault healthcheck failed"
+	walletOpen = "Open, vault initialised and unsealed"
+)
 
 func (hw *hashicorpWallet) Status() (string, error) {
 	hw.stateLock.Lock()
 	defer hw.stateLock.Unlock()
 
-	// TODO const values for statuses
-
 	if hw.client == nil {
-		return "Closed", nil
+		return walletClosed, nil
 	}
 
 	health, err := hw.client.Sys().Health()
 
 	if err != nil {
-		return "Vault unable to perform healthcheck", err
+		return healthcheckFailed, err
 	}
 
 	if !health.Initialized {
-		return "Vault uninitialized", fmt.Errorf("Vault health check, Initialized: %v, Sealed: %v", health.Initialized, health.Sealed)
+		return vaultUninitialised, fmt.Errorf("Vault health check, Initialized: %v, Sealed: %v", health.Initialized, health.Sealed)
 	}
 
 	if health.Sealed {
-		return "Vault sealed", fmt.Errorf("Vault health check, Initialized: %v, Sealed: %v", health.Initialized, health.Sealed)
+		return vaultSealed, fmt.Errorf("Vault health check, Initialized: %v, Sealed: %v", health.Initialized, health.Sealed)
 	}
 
-	return "Vault initialized and unsealed", nil
+	return walletOpen, nil
 }
 
 // Open implements accounts.Wallet, creating an authenticated Client and making it accessible to the wallet to enable vault operations.
@@ -301,7 +304,7 @@ func (hw *hashicorpWallet) SignTx(account accounts.Account, tx *types.Transactio
 	}
 
 	key, err := hw.getPrivateKey(secretData)
-	if(err != nil) {
+	if err != nil {
 		return nil, err
 	}
 	defer zeroKey(key)
@@ -321,8 +324,18 @@ func (hw *hashicorpWallet) SignTxWithPassphrase(account accounts.Account, passph
 	return hw.SignTx(account, tx, chainID, true)
 }
 
+func (hw *hashicorpWallet) read(path string, queryParams map[string][]string) (*api.Secret, error)  {
+	return hw.client.Logical().ReadWithData(path, queryParams)
+}
+
 func (hw *hashicorpWallet) getAccount(secretData SecretData) (accounts.Account, error) {
-	secret, err := hw.read(secretData.SecretEngine, secretData.Name, secretData.Version)
+	path, queryParams, err := secretData.readData()
+
+	if err != nil {
+		return accounts.Account{}, err
+	}
+
+	secret, err := hw.read(path, queryParams)
 
 	if err != nil {
 		return accounts.Account{}, err
@@ -346,15 +359,43 @@ func (hw *hashicorpWallet) getAccount(secretData SecretData) (accounts.Account, 
 	}
 
 	if common.IsHexAddress(pk) {
-		return accounts.Account{Address: common.HexToAddress(pk)}, nil
+		u := fmt.Sprintf("%v/v1/%v?version=%v", hw.clientData.Url, path, secretData.Version)
+
+		url, err := parseURL(u)
+
+		if err != nil {
+			return accounts.Account{}, err
+		}
+
+		return accounts.Account{Address: common.HexToAddress(pk), URL: url}, nil
 	}
 
 	//TODO change error
 	return accounts.Account{}, accounts.ErrUnknownAccount
 }
 
+// TODO Duplicated code from url.go
+// parseURL converts a user supplied URL into the accounts specific structure.
+func parseURL(url string) (accounts.URL, error) {
+	parts := strings.Split(url, "://")
+	if len(parts) != 2 || parts[0] == "" {
+		return accounts.URL{}, errors.New("protocol scheme missing")
+	}
+	return accounts.URL {
+		Scheme: parts[0],
+		Path:   parts[1],
+	}, nil
+}
+
+
 func (hw *hashicorpWallet) getPrivateKey(secretData SecretData) (*ecdsa.PrivateKey, error) {
-	secret, err := hw.read(secretData.SecretEngine, secretData.Name, secretData.Version)
+	path, queryParams, err := secretData.readData()
+
+	if err != nil {
+		return &ecdsa.PrivateKey{}, err
+	}
+
+	secret, err := hw.read(path, queryParams)
 
 	if err != nil {
 		return &ecdsa.PrivateKey{}, err
@@ -419,7 +460,12 @@ func zeroKey(k *ecdsa.PrivateKey) {
 }
 
 func GenerateAndStore(config HashicorpConfig) (common.Address, error) {
-	hw := newHashicorpWallet(config.ClientData, config.Secrets)
+	hw, err := newHashicorpWallet(config.ClientData, config.Secrets)
+
+	if err != nil {
+		return common.Address{}, err
+	}
+
 	hw.Open("")
 
 	if status, err := hw.Status(); err != nil {

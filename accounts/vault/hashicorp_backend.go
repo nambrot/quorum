@@ -3,6 +3,7 @@ package vault
 import (
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/log"
 	"sync"
 )
 
@@ -55,7 +56,13 @@ func (hb *hashicorpBackend) refreshWallets() {
 	//TODO consider not only fetching the wallets once (i.e. like in other backend impls)
 	if len(hb.wallets) == 0 {
 		for _, hc := range hb.hashicorpConfigs {
-			w := NewHashicorpWallet(hc.ClientData, hc.Secrets, hb.updateFeed)
+			w, err := NewHashicorpWallet(hc.ClientData, hc.Secrets, hb.updateFeed)
+
+			//TODO review how to handle
+			if err != nil {
+				log.Warn("Unable to create Hashicorp wallet", err)
+			}
+
 			events = append(events, accounts.WalletEvent{w, accounts.WalletArrived})
 			wallets = append(wallets, w)
 		}
