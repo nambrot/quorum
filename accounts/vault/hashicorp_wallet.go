@@ -241,9 +241,14 @@ func (hw *hashicorpWallet) Close() error {
 
 // Account implements accounts.Wallet, returning the accounts specified in config that are stored in the vault.
 func (hw *hashicorpWallet) Accounts() []accounts.Account {
-	hw.refresh()
+	if err := hw.refresh(); err != nil {
+		//TODO handle
+	}
 
-	return hw.accounts
+	cpy := make([]accounts.Account, len(hw.accounts))
+	copy(cpy, hw.accounts)
+
+	return cpy
 }
 
 // Contains implements accounts.Wallet, returning whether a particular account is managed by this wallet.

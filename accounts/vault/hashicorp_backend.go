@@ -30,7 +30,10 @@ func NewHashicorpBackend(hashicorpConfigs []HashicorpConfig) *hashicorpBackend {
 func (hb *hashicorpBackend) Wallets() []accounts.Wallet {
 	// check connection to vault is still up before returning wallet
 	// update list of accounts in wallets to cover the instances where secrets have been updated/deleted
-	return hb.wallets
+	cpy := make([]accounts.Wallet, len(hb.wallets))
+	copy(cpy, hb.wallets)
+
+	return cpy
 }
 
 func (hb *hashicorpBackend) Subscribe(sink chan<- accounts.WalletEvent) event.Subscription {
@@ -72,4 +75,3 @@ func (hb *hashicorpBackend) refreshWallets() {
 	}
 
 }
-
