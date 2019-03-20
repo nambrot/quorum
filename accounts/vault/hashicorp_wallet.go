@@ -26,7 +26,6 @@ const (
 	vaultRoleId = "VAULT_ROLE_ID"
 	vaultSecretId = "VAULT_SECRET_ID"
 	vaultApprolePath = "VAULT_APPROLE_PATH"
-	hashicorpScheme = "hashicorp"
 )
 
 type hashicorpWallet struct {
@@ -37,7 +36,7 @@ type hashicorpWallet struct {
 	accounts []accounts.Account
 	accountsSecretMap map[common.Address]SecretData
 	client clientI
-	updateFeed event.Feed
+	updateFeed *event.Feed
 }
 
 type ClientData struct {
@@ -56,7 +55,7 @@ type SecretData struct {
 	PrivateKeyId string `toml:",omitempty"`
 }
 
-func (s SecretData) readData() (string, map[string][]string, error) {
+func (s SecretData) toRequestData() (string, map[string][]string, error) {
 
 	path := fmt.Sprintf("%s/data/%s", s.SecretEngine, s.Name)
 
@@ -70,7 +69,7 @@ func (s SecretData) readData() (string, map[string][]string, error) {
 	return path, queryParams, nil
 }
 
-func NewHashicorpWallet(clientData ClientData, secrets []SecretData, updateFeed event.Feed) (*hashicorpWallet, error) {
+func NewHashicorpWallet(clientData ClientData, secrets []SecretData, updateFeed *event.Feed) (*hashicorpWallet, error) {
 	hw, err := newHashicorpWallet(clientData, secrets)
 	hw.updateFeed = updateFeed
 
@@ -184,7 +183,11 @@ func (hw *hashicorpWallet) Open(passphrase string) error {
 		hw.client = clientDelegate{cli}
 	}
 
-	hw.client.SetAddress(hw.clientData.Url)
+	err := hw.client.SetAddress(hw.clientData.Url)
+
+	if err != nil {
+		return err
+	}
 
 	// Authenticate the vault client, if Approle credentials not provided use Token
 	roleId, rIdOk := os.LookupEnv(vaultRoleId)
@@ -329,7 +332,7 @@ func (hw *hashicorpWallet) read(path string, queryParams map[string][]string) (*
 }
 
 func (hw *hashicorpWallet) getAccount(secretData SecretData) (accounts.Account, error) {
-	path, queryParams, err := secretData.readData()
+	path, queryParams, err := secretData.toRequestData()
 
 	if err != nil {
 		return accounts.Account{}, err
@@ -389,7 +392,7 @@ func parseURL(url string) (accounts.URL, error) {
 
 
 func (hw *hashicorpWallet) getPrivateKey(secretData SecretData) (*ecdsa.PrivateKey, error) {
-	path, queryParams, err := secretData.readData()
+	path, queryParams, err := secretData.toRequestData()
 
 	if err != nil {
 		return &ecdsa.PrivateKey{}, err

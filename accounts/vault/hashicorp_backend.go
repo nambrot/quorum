@@ -30,7 +30,6 @@ func NewHashicorpBackend(hashicorpConfigs []HashicorpConfig) *hashicorpBackend {
 func (hb *hashicorpBackend) Wallets() []accounts.Wallet {
 	// check connection to vault is still up before returning wallet
 	// update list of accounts in wallets to cover the instances where secrets have been updated/deleted
-	//hb.refreshWallets()
 	return hb.wallets
 }
 
@@ -42,8 +41,6 @@ func (hb *hashicorpBackend) Subscribe(sink chan<- accounts.WalletEvent) event.Su
 	// Subscribe the caller and track the subscriber count
 	sub := hb.updateScope.Track(hb.updateFeed.Subscribe(sink))
 
-	//hb.refreshWallets()
-
 	return sub
 }
 
@@ -53,10 +50,10 @@ func (hb *hashicorpBackend) refreshWallets() {
 	var wallets []accounts.Wallet
 	var events []accounts.WalletEvent
 
-	//TODO consider not only fetching the wallets once (i.e. like in other backend impls)
+	// The wallets for the keystore and hub backends can change frequently (e.g. files created/deleted in datadir, or USB devices connected/disconnected).  The Vault wallets have to be defined as part of the start up config.  As a result we only need to refresh wallets once, on startup - if the vault backend already has wallets then we know the accounts have been retrieved from the vaults on startup so we do not need to check again
 	if len(hb.wallets) == 0 {
 		for _, hc := range hb.hashicorpConfigs {
-			w, err := NewHashicorpWallet(hc.ClientData, hc.Secrets, hb.updateFeed)
+			w, err := NewHashicorpWallet(hc.ClientData, hc.Secrets, &hb.updateFeed)
 
 			//TODO review how to handle
 			if err != nil {
