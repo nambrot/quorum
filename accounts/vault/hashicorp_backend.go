@@ -30,6 +30,9 @@ func NewHashicorpBackend(hashicorpConfigs []HashicorpConfig) *hashicorpBackend {
 func (hb *hashicorpBackend) Wallets() []accounts.Wallet {
 	// check connection to vault is still up before returning wallet
 	// update list of accounts in wallets to cover the instances where secrets have been updated/deleted
+	hb.stateLock.RLock()
+	defer hb.stateLock.RUnlock()
+
 	cpy := make([]accounts.Wallet, len(hb.wallets))
 	copy(cpy, hb.wallets)
 
@@ -50,6 +53,9 @@ func (hb *hashicorpBackend) Subscribe(sink chan<- accounts.WalletEvent) event.Su
 func (hb *hashicorpBackend) refreshWallets() {
 	// Check which wallets have been added/dropped and raise corresponding events
 	// Update hb.wallets with refreshed wallets
+	hb.stateLock.Lock()
+	defer hb.stateLock.Unlock()
+
 	var wallets []accounts.Wallet
 	var events []accounts.WalletEvent
 
@@ -61,6 +67,7 @@ func (hb *hashicorpBackend) refreshWallets() {
 			//TODO review how to handle
 			if err != nil {
 				log.Warn("Unable to create Hashicorp wallet", err)
+				return
 			}
 
 			events = append(events, accounts.WalletEvent{w, accounts.WalletArrived})

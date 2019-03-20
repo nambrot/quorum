@@ -22,12 +22,6 @@ import (
 	"sync"
 )
 
-const (
-	vaultRoleId = "VAULT_ROLE_ID"
-	vaultSecretId = "VAULT_SECRET_ID"
-	vaultApprolePath = "VAULT_APPROLE_PATH"
-)
-
 type hashicorpWallet struct {
 	stateLock sync.RWMutex  // Protects read and write access to the wallet struct fields
 	url accounts.URL
@@ -136,8 +130,8 @@ const (
 )
 
 func (hw *hashicorpWallet) Status() (string, error) {
-	hw.stateLock.Lock()
-	defer hw.stateLock.Unlock()
+	hw.stateLock.RLock()
+	defer hw.stateLock.RUnlock()
 
 	if hw.client == nil {
 		return walletClosed, nil
@@ -150,15 +144,21 @@ func (hw *hashicorpWallet) Status() (string, error) {
 	}
 
 	if !health.Initialized {
-		return vaultUninitialised, fmt.Errorf("Vault health check, Initialized: %v, Sealed: %v", health.Initialized, health.Sealed)
+		return vaultUninitialised, fmt.Errorf("Vault health check result - Initialized: %v, Sealed: %v", health.Initialized, health.Sealed)
 	}
 
 	if health.Sealed {
-		return vaultSealed, fmt.Errorf("Vault health check, Initialized: %v, Sealed: %v", health.Initialized, health.Sealed)
+		return vaultSealed, fmt.Errorf("Vault health check result - Initialized: %v, Sealed: %v", health.Initialized, health.Sealed)
 	}
 
 	return walletOpen, nil
 }
+
+const (
+	vaultRoleId = "VAULT_ROLE_ID"
+	vaultSecretId = "VAULT_SECRET_ID"
+	vaultApprolePath = "VAULT_APPROLE_PATH"
+)
 
 // Open implements accounts.Wallet, creating an authenticated Client and making it accessible to the wallet to enable vault operations.
 //
@@ -166,32 +166,39 @@ func (hw *hashicorpWallet) Status() (string, error) {
 //
 // The passphrase arg is not used and this method does not retrieve any secrets from the vault.
 func (hw *hashicorpWallet) Open(passphrase string) error {
-	hw.stateLock.Lock() // State lock is enough since there's no connection yet at this point
-	defer hw.stateLock.Unlock()
-
-	// TODO is this check sufficient?
 	// If the vault client has already been created, don't create again
+	hw.stateLock.RLock()
 	if hw.client != nil {
 		return accounts.ErrWalletAlreadyOpen
 	}
+	hw.stateLock.RUnlock()
 
-	c := api.DefaultConfig()
+	hw.stateLock.Lock() // State lock is enough since there's no connection yet at this point
+	defer hw.stateLock.Unlock()
 
-	if cli, err := api.NewClient(c); err != nil {
-		return err
-	} else {
-		hw.client = clientDelegate{cli}
-	}
+	conf := api.DefaultConfig()
 
-	err := hw.client.SetAddress(hw.clientData.Url)
+	// If the environment variable `VAULT_TOKEN` is present, the token will be automatically added to the created client
+	client, err := api.NewClient(conf)
 
 	if err != nil {
 		return err
 	}
 
-	// Authenticate the vault client, if Approle credentials not provided use Token
+	err = client.SetAddress(hw.clientData.Url)
+
+	if err != nil {
+		return err
+	}
+
+	// If the roleID and secretID environment variables are present, these will be used to authenticate the client and replace the default VAULT_TOKEN value
+	// As using Approle is preferred over using the standalone token, an error will be returned if only one of these environment variables is set
 	roleId, rIdOk := os.LookupEnv(vaultRoleId)
 	secretId, sIdOk := os.LookupEnv(vaultSecretId)
+
+	if rIdOk != sIdOk {
+		return fmt.Errorf("both %q and %q environment variables must be set to use Approle authentication", vaultRoleId, vaultSecretId)
+	}
 
 	if rIdOk && sIdOk {
 		authData := map[string]interface{} {"role_id": roleId, "secret_id": secretId}
@@ -204,21 +211,21 @@ func (hw *hashicorpWallet) Open(passphrase string) error {
 
 		hw.clientData.Approle = approlePath
 
-		authResponse, err := hw.client.Logical().Write(fmt.Sprintf("auth/%s/login", hw.clientData.Approle), authData)
+		authResponse, err := client.Logical().Write(fmt.Sprintf("auth/%s/login", hw.clientData.Approle), authData)
 
 		if err != nil {
 			return err
 		}
 
 		token := authResponse.Auth.ClientToken
-		hw.client.SetToken(token)
+		client.SetToken(token)
 	}
-
-	// TODO If not set manually, token is set by reading VAULT_TOKEN.  The non-approle case will only have to be explicitly handled if using CLI/file config
 
 	hw.updateFeed.Send(
 		accounts.WalletEvent{hw, accounts.WalletOpened},
 	)
+
+	hw.client = clientDelegate{client}
 
 	return nil
 }
@@ -233,8 +240,9 @@ func (hw *hashicorpWallet) Close() error {
 	}
 
 	hw.client.ClearToken()
-	hw.client = nil //TODO set back to defaults
-	// What else to do here?
+	hw.client = nil
+	hw.accounts = nil
+	hw.accountsSecretMap = nil
 
 	return nil
 }
