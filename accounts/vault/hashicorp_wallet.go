@@ -392,18 +392,18 @@ func (hw *hashicorpWallet) getAccount(secretData SecretData) (accounts.Account, 
 		return accounts.Account{}, hashicorpError{"AccountID value in vault is not plain string", secretData, hw.url,nil}
 	}
 
-	if common.IsHexAddress(strAcct) {
-		u := fmt.Sprintf("%v/v1/%v?version=%v", hw.clientData.Url, path, secretData.Version)
-		url, err := parseURL(u)
-
-		if err != nil {
-			return accounts.Account{}, hashicorpError{"unable to create account URL", secretData, hw.url, err}
-		}
-
-		return accounts.Account{Address: common.HexToAddress(strAcct), URL: url}, nil
+	if !common.IsHexAddress(strAcct) {
+		return accounts.Account{}, hashicorpError{"unable to get account from vault", secretData, hw.url, nil}
 	}
 
-	return accounts.Account{}, hashicorpError{"unable to get account from vault", secretData, hw.url, nil}
+	u := fmt.Sprintf("%v/v1/%v?version=%v", hw.clientData.Url, path, secretData.Version)
+	url, err := parseURL(u)
+
+	if err != nil {
+		return accounts.Account{}, hashicorpError{"unable to create account URL", secretData, hw.url, err}
+	}
+
+	return accounts.Account{Address: common.HexToAddress(strAcct), URL: url}, nil
 }
 
 func zeroSecretData(data *interface{}) {
@@ -432,44 +432,42 @@ func (hw *hashicorpWallet) getPrivateKey(secretData SecretData) (*ecdsa.PrivateK
 	path, queryParams, err := secretData.toRequestData()
 
 	if err != nil {
-		return &ecdsa.PrivateKey{}, err
+		return &ecdsa.PrivateKey{}, hashicorpError{msg: "unable to get secret URL from data", secret: secretData, err: err}
 	}
 
 	secret, err := hw.read(path, queryParams)
+	defer zeroSecret(secret)
 
 	if err != nil {
-		return &ecdsa.PrivateKey{}, err
+		return &ecdsa.PrivateKey{}, hashicorpError{"unable to retrieve secret from vault", secretData, hw.url, err}
 	}
 
 	data := secret.Data["data"]
+	defer zeroSecretData(&data)
 
 	m := data.(map[string]interface{})
 	k, ok := m[secretData.KeyID]
 
 	if !ok {
-		//TODO change this error
-		return &ecdsa.PrivateKey{}, accounts.ErrUnknownAccount
+		return &ecdsa.PrivateKey{}, hashicorpError{"no value found in vault with provided KeyID", secretData, hw.url,nil}
 	}
 
-	pk, ok := k.(string)
+	strK, ok := k.(string)
 
 	if !ok {
-		//TODO throw error as value retrieved from vault is not of type string
-		panic("Not of type string")
+		return &ecdsa.PrivateKey{}, hashicorpError{"KeyID value in vault is not plain string", secretData, hw.url,nil}
 	}
-	fmt.Printf("Private key: %v\n", pk)
 
-	key, err := crypto.HexToECDSA(pk)
+	key, err := crypto.HexToECDSA(strK)
 
 	if err != nil {
-		return &ecdsa.PrivateKey{}, err
+		return &ecdsa.PrivateKey{}, hashicorpError{"", secretData, hw.url, err}
 	}
 
 	return key, nil
 }
 
 func (hw *hashicorpWallet) refreshAccounts() error {
-	//TODO don't just overwrite, check existing accounts
 	accts := make([]accounts.Account, len(hw.secrets))
 	acctsScrtsMap := make(map[common.Address]SecretData)
 
@@ -490,8 +488,8 @@ func (hw *hashicorpWallet) refreshAccounts() error {
 	return nil
 }
 
-//TODO duplicated code from keystore.go
 // zeroKey zeroes a private key in memory.
+//TODO duplicated code from keystore.go
 func zeroKey(k *ecdsa.PrivateKey) {
 	b := k.D.Bits()
 	for i := range b {
@@ -506,12 +504,16 @@ func GenerateAndStore(config HashicorpConfig) (common.Address, error) {
 		return common.Address{}, err
 	}
 
-	hw.Open("")
+	err = hw.Open("")
+
+	if err != nil {
+		return common.Address{}, err
+	}
 
 	if status, err := hw.Status(); err != nil {
 		return common.Address{}, err
-	} else if status == "Closed" {
-		return common.Address{}, fmt.Errorf("error creating Vault client")
+	} else if status != walletOpen {
+		return common.Address{}, fmt.Errorf("error creating Vault client, %v", status)
 	}
 
 	key, err := generateKey(rand.Reader)
@@ -558,7 +560,7 @@ func (hw *hashicorpWallet) storeKey(key *ecdsa.PrivateKey) (common.Address, erro
 	}
 
 	if _, err := hw.client.Logical().Write(path, data); err != nil {
-		return common.Address{}, err
+		return common.Address{}, hashicorpError{"unable to write secret to vault", s, hw.url, err}
 	}
 
 	return address, nil
