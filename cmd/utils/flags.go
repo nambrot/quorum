@@ -1127,10 +1127,10 @@ func setVault(ctx *cli.Context, cfg *node.Config) {
 		s[0].Version = ctx.Int(VaultSecretVersionFlag.Name)
 	}
 	if ctx.IsSet(VaultSecretPublicKeyIdFlag.Name) {
-		s[0].PublicKeyId = ctx.String(VaultSecretPublicKeyIdFlag.Name)
+		s[0].AccountID = ctx.String(VaultSecretPublicKeyIdFlag.Name)
 	}
 	if ctx.IsSet(VaultSecretPrivateKeyIdFlag.Name) {
-		s[0].PrivateKeyId = ctx.String(VaultSecretPrivateKeyIdFlag.Name)
+		s[0].KeyID = ctx.String(VaultSecretPrivateKeyIdFlag.Name)
 	}
 
 	cfg.Vaults = make([]vault.HashicorpConfig, 1)

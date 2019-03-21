@@ -31,6 +31,7 @@ type hashicorpWallet struct {
 	accountsSecretMap map[common.Address]SecretData
 	client clientI
 	updateFeed *event.Feed
+	logger log.Logger
 }
 
 type ClientData struct {
@@ -45,8 +46,8 @@ type SecretData struct {
 	Name         string `toml:",omitempty"`
 	SecretEngine string `toml:",omitempty"`
 	Version      int    `toml:",omitempty"`
-	PublicKeyId  string `toml:",omitempty"`
-	PrivateKeyId string `toml:",omitempty"`
+	AccountID    string `toml:",omitempty"`
+	KeyID        string `toml:",omitempty"`
 }
 
 func (s SecretData) toRequestData() (string, map[string][]string, error) {
@@ -66,6 +67,7 @@ func (s SecretData) toRequestData() (string, map[string][]string, error) {
 func NewHashicorpWallet(clientData ClientData, secrets []SecretData, updateFeed *event.Feed) (*hashicorpWallet, error) {
 	hw, err := newHashicorpWallet(clientData, secrets)
 	hw.updateFeed = updateFeed
+	hw.logger = log.New("url", hw.url)
 
 	return hw, err
 }
@@ -247,11 +249,10 @@ func (hw *hashicorpWallet) Close() error {
 	return nil
 }
 
-// Account implements accounts.Wallet, returning the accounts specified in config that are stored in the vault.
+// Account implements accounts.Wallet, returning the accounts specified in config that are stored in the vault.  refreshAccounts() retrieves the list of accounts from the vault and so must have been called prior to this method in order to return a non-empty slice
 func (hw *hashicorpWallet) Accounts() []accounts.Account {
-	if err := hw.refresh(); err != nil {
-		//TODO handle
-	}
+	hw.stateLock.RLock()
+	defer hw.stateLock.RUnlock()
 
 	cpy := make([]accounts.Account, len(hw.accounts))
 	copy(cpy, hw.accounts)
@@ -265,7 +266,7 @@ func (hw *hashicorpWallet) Contains(account accounts.Account) bool {
 	defer hw.stateLock.RUnlock()
 
 	for _, acct := range hw.accounts {
-		if acct.Address == account.Address {
+		if acct.Address == account.Address && (accounts.URL{} == account.URL || acct.URL == account.URL) {
 			return true
 		}
 	}
@@ -279,8 +280,8 @@ func (*hashicorpWallet) Derive(path accounts.DerivationPath, pin bool) (accounts
 }
 
 // SelfDerive implements accounts.Wallet, but is a noop for Vault wallets since these have no notion of hierarchical account derivation.
-func (*hashicorpWallet) SelfDerive(base accounts.DerivationPath, chain ethereum.ChainStateReader) {
-	log.Warn("SelfDerive is not supported for Hashicorp Vault wallets")
+func (hw *hashicorpWallet) SelfDerive(base accounts.DerivationPath, chain ethereum.ChainStateReader) {
+	hw.logger.Warn("SelfDerive(...) is not supported for Hashicorp Vault wallets")
 }
 
 func (hw *hashicorpWallet) SignHash(account accounts.Account, hash []byte) ([]byte, error) {
@@ -297,7 +298,7 @@ func (hw *hashicorpWallet) SignHash(account accounts.Account, hash []byte) ([]by
 	}
 
 	key, err := hw.getPrivateKey(secretData)
-	if(err != nil) {
+	if err != nil {
 		return nil, err
 	}
 	defer zeroKey(key)
@@ -306,7 +307,6 @@ func (hw *hashicorpWallet) SignHash(account accounts.Account, hash []byte) ([]by
 }
 
 func (hw *hashicorpWallet) SignTx(account accounts.Account, tx *types.Transaction, chainID *big.Int, isQuorum bool) (*types.Transaction, error) {
-
 	hw.stateLock.RLock()
 	defer hw.stateLock.RUnlock()
 
@@ -341,53 +341,77 @@ func (hw *hashicorpWallet) SignTxWithPassphrase(account accounts.Account, passph
 }
 
 func (hw *hashicorpWallet) read(path string, queryParams map[string][]string) (*api.Secret, error)  {
+	hw.stateLock.RLock()
+	defer hw.stateLock.RUnlock()
+
 	return hw.client.Logical().ReadWithData(path, queryParams)
+}
+
+type hashicorpError struct {
+	msg string
+	secret SecretData
+	walletUrl accounts.URL
+	err error
+}
+
+func (e hashicorpError) Error() string {
+	if e.err != nil {
+		return fmt.Sprintf("%s, %v: wallet %v, secret %v", e.msg, e.err, e.walletUrl, e.secret)
+	}
+
+	return fmt.Sprintf("%s: wallet %v, secret %v", e.msg, e.walletUrl, e.secret)
 }
 
 func (hw *hashicorpWallet) getAccount(secretData SecretData) (accounts.Account, error) {
 	path, queryParams, err := secretData.toRequestData()
 
 	if err != nil {
-		return accounts.Account{}, err
+		return accounts.Account{}, hashicorpError{msg: "unable to get secret URL from data", secret: secretData, err: err}
 	}
 
 	secret, err := hw.read(path, queryParams)
+	defer zeroSecret(secret)
 
 	if err != nil {
-		return accounts.Account{}, err
+		return accounts.Account{}, hashicorpError{"unable to retrieve secret from vault", secretData, hw.url, err}
 	}
 
 	data := secret.Data["data"]
+	defer zeroSecretData(&data)
 
 	m := data.(map[string]interface{})
-	pubKey, ok := m[secretData.PublicKeyId]
+	acct, ok := m[secretData.AccountID]
 
 	if !ok {
-		//TODO change this error
-		return accounts.Account{}, accounts.ErrUnknownAccount
+		return accounts.Account{}, hashicorpError{"no value found in vault with provided AccountID", secretData, hw.url,nil}
 	}
 
-	pk, ok := pubKey.(string)
+	strAcct, ok := acct.(string)
 
 	if !ok {
-		//TODO throw error as value retrieved from vault is not of type string
-		panic("Retrieved key is not of type string")
+		return accounts.Account{}, hashicorpError{"AccountID value in vault is not plain string", secretData, hw.url,nil}
 	}
 
-	if common.IsHexAddress(pk) {
+	if common.IsHexAddress(strAcct) {
 		u := fmt.Sprintf("%v/v1/%v?version=%v", hw.clientData.Url, path, secretData.Version)
-
 		url, err := parseURL(u)
 
 		if err != nil {
-			return accounts.Account{}, err
+			return accounts.Account{}, hashicorpError{"unable to create account URL", secretData, hw.url, err}
 		}
 
-		return accounts.Account{Address: common.HexToAddress(pk), URL: url}, nil
+		return accounts.Account{Address: common.HexToAddress(strAcct), URL: url}, nil
 	}
 
-	//TODO change error
-	return accounts.Account{}, accounts.ErrUnknownAccount
+	return accounts.Account{}, hashicorpError{"unable to get account from vault", secretData, hw.url, nil}
+}
+
+func zeroSecretData(data *interface{}) {
+	data = nil
+}
+
+func zeroSecret(secret *api.Secret) {
+	secret = nil
 }
 
 // TODO Duplicated code from url.go
@@ -420,7 +444,7 @@ func (hw *hashicorpWallet) getPrivateKey(secretData SecretData) (*ecdsa.PrivateK
 	data := secret.Data["data"]
 
 	m := data.(map[string]interface{})
-	k, ok := m[secretData.PrivateKeyId]
+	k, ok := m[secretData.KeyID]
 
 	if !ok {
 		//TODO change this error
@@ -444,7 +468,7 @@ func (hw *hashicorpWallet) getPrivateKey(secretData SecretData) (*ecdsa.PrivateK
 	return key, nil
 }
 
-func (hw *hashicorpWallet) refresh() error {
+func (hw *hashicorpWallet) refreshAccounts() error {
 	//TODO don't just overwrite, check existing accounts
 	accts := make([]accounts.Account, len(hw.secrets))
 	acctsScrtsMap := make(map[common.Address]SecretData)
@@ -529,8 +553,8 @@ func (hw *hashicorpWallet) storeKey(key *ecdsa.PrivateKey) (common.Address, erro
 
 	data := make(map[string]interface{})
 	data["data"] = map[string]interface{}{
-		s.PublicKeyId : addrHex,
-		s.PrivateKeyId: keyHex,
+		s.AccountID: addrHex,
+		s.KeyID:     keyHex,
 	}
 
 	if _, err := hw.client.Logical().Write(path, data); err != nil {

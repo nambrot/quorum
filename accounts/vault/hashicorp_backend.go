@@ -63,10 +63,14 @@ func (hb *hashicorpBackend) refreshWallets() {
 	if len(hb.wallets) == 0 {
 		for _, hc := range hb.hashicorpConfigs {
 			w, err := NewHashicorpWallet(hc.ClientData, hc.Secrets, &hb.updateFeed)
-
-			//TODO review how to handle
+			//TODO review how to handle and add contextual info to msgs
 			if err != nil {
 				log.Warn("Unable to create Hashicorp wallet", err)
+				return
+			}
+
+			if err = w.refreshAccounts(); err != nil {
+				log.Warn("Unable to refresh accounts")
 				return
 			}
 
