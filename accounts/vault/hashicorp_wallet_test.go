@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/hashicorp/vault/api"
 	"os"
@@ -483,14 +484,12 @@ func TestContains(t *testing.T) {
 }
 
 func TestGetAccount(t *testing.T) {
-
 	acct := "cb2b4a9afb2c14da442d7a39aa38d13c913ee4b0"
 	clientUrl := "http://clienturl"
 
 	mockReadWithData := func(path string, data map[string][]string) (*api.Secret, error) {
 		m := make(map[string]interface{})
 		m["account"] = acct
-		m["key"] = "4eb2ffc002a3a6c009f883a7209517ffd26dd631e3baeed2e88334ff4f88dd2e"
 
 		fromVault := make(map[string]interface{})
 		fromVault["data"] = m
@@ -507,9 +506,9 @@ func TestGetAccount(t *testing.T) {
 		},
 	}
 
-	data := SecretData{Name: "name", SecretEngine: "engine", Version: 0, AccountID: "account", KeyID: "key"}
+	secret := SecretData{Name: "name", SecretEngine: "engine", Version: 0, AccountID: "account", KeyID: "key"}
 
-	got, err := hw.getAccount(data)
+	got, err := hw.getAccount(secret)
 
 	if err != nil {
 		t.Errorf("unexpected error %v", err)
@@ -523,7 +522,48 @@ func TestGetAccount(t *testing.T) {
 	if got != want {
 		t.Errorf("incorrect value returned\nwant: %v\ngot : %v", want, got)
 	}
+}
 
+func TestGetPrivateKey(t *testing.T) {
+	key := "4eb2ffc002a3a6c009f883a7209517ffd26dd631e3baeed2e88334ff4f88dd2e"
+	clientUrl := "http://clienturl"
+
+	mockReadWithData := func(path string, data map[string][]string) (*api.Secret, error) {
+		m := make(map[string]interface{})
+		m["key"] = key
+
+		fromVault := make(map[string]interface{})
+		fromVault["data"] = m
+
+		return &api.Secret{Data: fromVault}, nil
+	}
+
+	hw := hashicorpWallet{
+		client: &clientMock{
+			r: mockReadWithData,
+		},
+		clientData: ClientData{
+			Url: clientUrl,
+		},
+	}
+
+	secret := SecretData{Name: "name", SecretEngine: "engine", Version: 0, AccountID: "account", KeyID: "key"}
+
+	got, err := hw.getPrivateKey(secret)
+
+	if err != nil {
+		t.Errorf("unexpected error %v", err)
+	}
+
+	want, err := crypto.HexToECDSA(key)
+
+	if err != nil {
+		t.Errorf("unexpected error %v", err)
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("incorrect value returned\nwant: %+v\ngot : %+v", want, got)
+	}
 }
 
 //func TestRead(t *testing.T) {
