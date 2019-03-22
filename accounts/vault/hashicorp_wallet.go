@@ -43,6 +43,7 @@ type ClientData struct {
 	ClientKey  string `toml:",omitempty"`
 }
 
+// TODO don't export and use constructor?
 type SecretData struct {
 	Name         string `toml:",omitempty"`
 	SecretEngine string `toml:",omitempty"`
@@ -52,7 +53,6 @@ type SecretData struct {
 }
 
 func (s SecretData) toRequestData() (string, map[string][]string, error) {
-
 	path := fmt.Sprintf("%s/data/%s", s.SecretEngine, s.Name)
 
 	queryParams := make(map[string][]string)
@@ -283,8 +283,8 @@ func (hw *hashicorpWallet) Contains(account accounts.Account) bool {
 	hw.stateLock.RLock()
 	defer hw.stateLock.RUnlock()
 
-	for _, acct := range hw.accounts {
-		if acct.Address == account.Address && (accounts.URL{} == account.URL || acct.URL == account.URL) {
+	for _, wltAcct := range hw.accounts {
+		if wltAcct.Address == account.Address && (account.URL == accounts.URL{} || wltAcct.URL == account.URL) {
 			return true
 		}
 	}

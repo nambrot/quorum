@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/accounts"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/hashicorp/vault/api"
 	"os"
@@ -15,6 +16,7 @@ type clientMock struct {
 	response *api.HealthResponse
 	token string
 	err error
+	r readWithDataMock
 }
 
 func (c *clientMock) SetAddress(addr string) error {
@@ -29,8 +31,8 @@ func (c *clientMock) ClearToken() {
 	panic("implement me")
 }
 
-func (*clientMock) Logical() logicalI {
-	return &logicalMock{}
+func (c *clientMock) Logical() logicalI {
+	return &logicalMock{r: c.r}
 }
 
 func (c *clientMock) Sys() sysI {
@@ -38,8 +40,11 @@ func (c *clientMock) Sys() sysI {
 }
 
 type logicalMock struct {
-
+	r readWithDataMock
 }
+
+type readWithDataMock = func(path string, data map[string][]string) (*api.Secret, error)
+
 const (
 	approletoken = "approletoken"
 	defaulttoken = "defaulttoken"
@@ -52,12 +57,8 @@ func (logicalMock) Write(path string, data map[string]interface{}) (*api.Secret,
 	return response, nil
 }
 
-func (logicalMock) ReadWithData(path string, data map[string][]string) (*api.Secret, error) {
-	d := make(map[string]interface{})
-	d["path"] = path
-	d["data"] = data
-
-	return &api.Secret{Data: d}, nil
+func (l logicalMock) ReadWithData(path string, data map[string][]string) (*api.Secret, error) {
+	return l.r(path, data)
 }
 
 type sysMock struct {
@@ -281,7 +282,248 @@ func TestCloseReturnsStateToSameAsBeforeOpen(t *testing.T) {
 }
 
 func TestCloseDoesNothingIfNoClientInWallet(t *testing.T) {
-	panic("implement me")
+	hw, err := NewHashicorpWallet(
+		ClientData{Url: "http://someurl"},
+		[]SecretData{{Name: "somesecret"}},
+		&event.Feed{},
+	)
+
+	if err != nil {
+		t.Errorf("unexpected error %v", err)
+	}
+
+	initialHw := *hw
+
+	if err = hw.Close(); err != nil {
+		t.Errorf("unable to close wallet %v", err)
+	}
+
+	closedHw := *hw
+
+	if !reflect.DeepEqual(initialHw, closedHw) {
+		t.Errorf("wallet state should not have changed after Close()\ninit: %v\ngot : %v", initialHw, closedHw)
+	}
+}
+
+func TestAccountsReturnsCopyToPreventChangingWalletState(t *testing.T) {
+	addr1 := common.StringToAddress("someaddress")
+	addr2 := common.StringToAddress("anotheraddress")
+
+	accts := []accounts.Account{
+		{Address: addr1},
+		{Address: addr2},
+	}
+	hw := hashicorpWallet{accounts: accts}
+
+	want := accts
+	got := hw.Accounts()
+
+	if !reflect.DeepEqual(want, got) {
+		t.Errorf("unexpected result\nwant: %+v\ngot : %+v", want, got)
+	}
+
+	addr3 := common.StringToAddress("thirdaddress")
+	got[0].Address = addr3
+
+	if reflect.DeepEqual(got, hw.accounts) {
+		t.Errorf("changing the slice returned by Accounts() should not have changed the slice in the wallet itself\nwant: %v\ngot : %v",
+			[]accounts.Account{
+				{Address: addr1},
+				{Address: addr2},
+			},
+			got)
+	}
+}
+
+var containsTests = []struct {
+	name string
+	wltAccts []accounts.Account
+	target accounts.Account
+	want bool
+} {
+	{
+		name: "Wallet contains account with same address and URL as target",
+		wltAccts: []accounts.Account{
+			{
+				common.StringToAddress("someaddress"),
+				accounts.URL{"http", "someurl"},
+			},
+			{
+				common.StringToAddress("altaddress"),
+				accounts.URL{"http", "alturl"},
+			},
+		},
+		target: accounts.Account {
+			common.StringToAddress("someaddress"),
+			accounts.URL{"http", "someurl"},
+		},
+		want: true,
+	},
+	{
+		name: "Wallet contains account with same address and zero value URL as target",
+		wltAccts: []accounts.Account{
+			{
+				common.StringToAddress("someaddress"),
+				accounts.URL{},
+			},
+			{
+				common.StringToAddress("altaddress"),
+				accounts.URL{"http", "alturl"},
+			},
+		},
+		target: accounts.Account {
+			common.StringToAddress("someaddress"),
+			accounts.URL{},
+		},
+		want: true,
+	},
+	{
+		name: "Wallet contains account with same address but only wallet acct has zero value URL",
+		wltAccts: []accounts.Account{
+			{
+				common.StringToAddress("someaddress"),
+				accounts.URL{},
+			},
+			{
+				common.StringToAddress("altaddress"),
+				accounts.URL{"http", "alturl"},
+			},
+		},
+		target: accounts.Account {
+			common.StringToAddress("someaddress"),
+			accounts.URL{"http", "someurl"},
+		},
+		want: false,
+	},
+	{
+		name: "Wallet contains account with same address but only target acct has zero value URL",
+		wltAccts: []accounts.Account{
+			{
+				common.StringToAddress("someaddress"),
+				accounts.URL{"http", "someurl"},
+			},
+			{
+				common.StringToAddress("altaddress"),
+				accounts.URL{"http", "alturl"},
+			},
+		},
+		target: accounts.Account {
+			common.StringToAddress("someaddress"),
+			accounts.URL{},
+		},
+		want: true,
+	},
+	{
+		name: "Wallet contains account with same address but different URL",
+		wltAccts: []accounts.Account{
+			{
+				common.StringToAddress("someaddress"),
+				accounts.URL{"http", "someurl"},
+			},
+			{
+				common.StringToAddress("altaddress"),
+				accounts.URL{"http", "alturl"},
+			},
+		},
+		target: accounts.Account {
+			common.StringToAddress("someaddress"),
+			accounts.URL{"http", "anotherurl"},
+		},
+		want: false,
+	},
+	{
+		name: "Wallet contains account with different address but same URL",
+		wltAccts: []accounts.Account{
+			{
+				common.StringToAddress("someaddress"),
+				accounts.URL{"http", "someurl"},
+			},
+			{
+				common.StringToAddress("altaddress"),
+				accounts.URL{"http", "alturl"},
+			},
+		},
+		target: accounts.Account {
+			common.StringToAddress("anotheraddress"),
+			accounts.URL{"http", "someurl"},
+		},
+		want: false,
+	},
+	{
+		name: "Wallet does not contain account with same address or URL",
+		wltAccts: []accounts.Account{
+			{
+				common.StringToAddress("someaddress"),
+				accounts.URL{"http", "someurl"},
+			},
+			{
+				common.StringToAddress("altaddress"),
+				accounts.URL{"http", "alturl"},
+			},
+		},
+		target: accounts.Account {
+			common.StringToAddress("anotheraddress"),
+			accounts.URL{"http", "anotherurl"},
+		},
+		want: false,
+	},
+
+}
+func TestContains(t *testing.T) {
+	for _, tt := range containsTests {
+		t.Run(tt.name, func(t *testing.T) {
+			hw := hashicorpWallet{accounts: tt.wltAccts}
+			got := hw.Contains(tt.target)
+
+			if got != tt.want {
+				t.Errorf("Incorrect result from Contains()\nwant: %v\ngot : %v", tt.want, got)
+			}
+		})
+	}
+}
+
+func TestGetAccount(t *testing.T) {
+
+	acct := "cb2b4a9afb2c14da442d7a39aa38d13c913ee4b0"
+	clientUrl := "http://clienturl"
+
+	mockReadWithData := func(path string, data map[string][]string) (*api.Secret, error) {
+		m := make(map[string]interface{})
+		m["account"] = acct
+		m["key"] = "4eb2ffc002a3a6c009f883a7209517ffd26dd631e3baeed2e88334ff4f88dd2e"
+
+		fromVault := make(map[string]interface{})
+		fromVault["data"] = m
+
+		return &api.Secret{Data: fromVault}, nil
+	}
+
+	hw := hashicorpWallet{
+		client: &clientMock{
+			r: mockReadWithData,
+		},
+		clientData: ClientData{
+			Url: clientUrl,
+		},
+	}
+
+	data := SecretData{Name: "name", SecretEngine: "engine", Version: 0, AccountID: "account", KeyID: "key"}
+
+	got, err := hw.getAccount(data)
+
+	if err != nil {
+		t.Errorf("unexpected error %v", err)
+	}
+
+	want := accounts.Account{
+		Address: common.HexToAddress(acct),
+		URL: accounts.URL{"http", "clienturl/v1/engine/data/name?version=0"},
+	}
+
+	if got != want {
+		t.Errorf("incorrect value returned\nwant: %v\ngot : %v", want, got)
+	}
+
 }
 
 //func TestRead(t *testing.T) {
