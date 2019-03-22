@@ -30,6 +30,7 @@ type hashicorpWallet struct {
 	accounts []accounts.Account
 	accountsSecretMap map[common.Address]SecretData
 	client clientI
+	clientFactory clientFactory
 	updateFeed *event.Feed
 	logger log.Logger
 }
@@ -68,6 +69,7 @@ func NewHashicorpWallet(clientData ClientData, secrets []SecretData, updateFeed 
 	hw, err := newHashicorpWallet(clientData, secrets)
 	hw.updateFeed = updateFeed
 	hw.logger = log.New("url", hw.url)
+	hw.clientFactory = defaultClientFactory{}
 
 	return hw, err
 }
@@ -162,6 +164,26 @@ const (
 	vaultApprolePath = "VAULT_APPROLE_PATH"
 )
 
+type clientFactory interface {
+	create() (clientI, error)
+}
+
+type defaultClientFactory struct {
+
+}
+
+func (defaultClientFactory) create() (clientI, error) {
+	conf := api.DefaultConfig()
+	client, err := api.NewClient(conf)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return clientDelegate{client}, nil
+}
+
+
 // Open implements accounts.Wallet, creating an authenticated Client and making it accessible to the wallet to enable vault operations.
 //
 // If Approle credentials have been provided these will be used to authenticate the Client with the vault, else the Token will be used.
@@ -178,18 +200,16 @@ func (hw *hashicorpWallet) Open(passphrase string) error {
 	hw.stateLock.Lock() // State lock is enough since there's no connection yet at this point
 	defer hw.stateLock.Unlock()
 
-	conf := api.DefaultConfig()
-
 	// If the environment variable `VAULT_TOKEN` is present, the token will be automatically added to the created client
-	client, err := api.NewClient(conf)
+
+	var err error
+	hw.client, err = hw.clientFactory.create()
 
 	if err != nil {
 		return err
 	}
 
-	err = client.SetAddress(hw.clientData.Url)
-
-	if err != nil {
+	if err := hw.client.SetAddress(hw.clientData.Url); err != nil {
 		return err
 	}
 
@@ -213,21 +233,19 @@ func (hw *hashicorpWallet) Open(passphrase string) error {
 
 		hw.clientData.Approle = approlePath
 
-		authResponse, err := client.Logical().Write(fmt.Sprintf("auth/%s/login", hw.clientData.Approle), authData)
+		authResponse, err := hw.client.Logical().Write(fmt.Sprintf("auth/%s/login", hw.clientData.Approle), authData)
 
 		if err != nil {
 			return err
 		}
 
 		token := authResponse.Auth.ClientToken
-		client.SetToken(token)
+		hw.client.SetToken(token)
 	}
 
 	hw.updateFeed.Send(
 		accounts.WalletEvent{hw, accounts.WalletOpened},
 	)
-
-	hw.client = clientDelegate{client}
 
 	return nil
 }
