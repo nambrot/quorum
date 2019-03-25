@@ -1,4 +1,4 @@
-package vault
+package hashicorp
 
 import (
 	"crypto/ecdsa"
@@ -22,20 +22,12 @@ import (
 	"sync"
 )
 
-type hashicorpWallet struct {
-	stateLock sync.RWMutex  // Protects read and write access to the wallet struct fields
-	url accounts.URL
-	clientData ClientData
-	secrets []SecretData
-	accounts []accounts.Account
-	accountsSecretMap map[common.Address]SecretData
-	client clientI
-	clientFactory clientFactory
-	updateFeed *event.Feed
-	logger log.Logger
+type WalletConfig struct {
+	Client ClientConfig `toml:",omitempty"`
+	Secrets    []Secret     `toml:",omitempty"`
 }
 
-type ClientData struct {
+type ClientConfig struct {
 	Url        string `toml:",omitempty"`
 	Approle    string `toml:",omitempty"`
 	CaCert     string `toml:",omitempty"`
@@ -43,8 +35,7 @@ type ClientData struct {
 	ClientKey  string `toml:",omitempty"`
 }
 
-// TODO don't export and use constructor?
-type SecretData struct {
+type Secret struct {
 	Name         string `toml:",omitempty"`
 	SecretEngine string `toml:",omitempty"`
 	Version      int    `toml:",omitempty"`
@@ -52,7 +43,7 @@ type SecretData struct {
 	KeyID        string `toml:",omitempty"`
 }
 
-func (s SecretData) toRequestData() (string, map[string][]string, error) {
+func (s Secret) toRequestData() (string, map[string][]string, error) {
 	path := fmt.Sprintf("%s/data/%s", s.SecretEngine, s.Name)
 
 	queryParams := make(map[string][]string)
@@ -65,7 +56,20 @@ func (s SecretData) toRequestData() (string, map[string][]string, error) {
 	return path, queryParams, nil
 }
 
-func NewHashicorpWallet(clientData ClientData, secrets []SecretData, updateFeed *event.Feed) (*hashicorpWallet, error) {
+type hashicorpWallet struct {
+	stateLock         sync.RWMutex  // Protects read and write access to the wallet struct fields
+	url               accounts.URL
+	clientData        ClientConfig
+	secrets           []Secret
+	accounts          []accounts.Account
+	accountsSecretMap map[common.Address]Secret
+	client            clientI
+	clientFactory     clientFactory
+	updateFeed        *event.Feed
+	logger            log.Logger
+}
+
+func NewWallet(clientData ClientConfig, secrets []Secret, updateFeed *event.Feed) (*hashicorpWallet, error) {
 	hw, err := newHashicorpWallet(clientData, secrets)
 	hw.updateFeed = updateFeed
 	hw.logger = log.New("url", hw.url)
@@ -76,7 +80,7 @@ func NewHashicorpWallet(clientData ClientData, secrets []SecretData, updateFeed 
 
 // TODO revisit comment
 // separate method so that it can be used to create full wallet and for geth account new
-func newHashicorpWallet(clientData ClientData, secrets []SecretData) (*hashicorpWallet, error) {
+func newHashicorpWallet(clientData ClientConfig, secrets []Secret) (*hashicorpWallet, error) {
 	url, err := parseURL(clientData.Url)
 
 	if err != nil {
@@ -90,35 +94,6 @@ func newHashicorpWallet(clientData ClientData, secrets []SecretData) (*hashicorp
 	}
 
 	return hw, nil
-}
-
-type clientI interface {
-	Logical() logicalI
-	Sys() sysI
-	SetAddress(addr string) error
-	SetToken(v string)
-	ClearToken()
-}
-
-type logicalI interface{
-	ReadWithData(path string, data map[string][]string) (*api.Secret, error)
-	Write(path string, data map[string]interface{}) (*api.Secret, error)
-}
-
-type sysI interface{
-	Health() (*api.HealthResponse, error)
-}
-
-type clientDelegate struct {
-	*api.Client
-}
-
-func (cd clientDelegate) Logical() logicalI {
-	return cd.Client.Logical()
-}
-
-func (cd clientDelegate) Sys() sysI {
-	return cd.Client.Sys()
 }
 
 func (hw *hashicorpWallet) URL() accounts.URL {
@@ -163,26 +138,6 @@ const (
 	vaultSecretId = "VAULT_SECRET_ID"
 	vaultApprolePath = "VAULT_APPROLE_PATH"
 )
-
-type clientFactory interface {
-	create() (clientI, error)
-}
-
-type defaultClientFactory struct {
-
-}
-
-func (defaultClientFactory) create() (clientI, error) {
-	conf := api.DefaultConfig()
-	client, err := api.NewClient(conf)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return clientDelegate{client}, nil
-}
-
 
 // Open implements accounts.Wallet, creating an authenticated Client and making it accessible to the wallet to enable vault operations.
 //
@@ -366,10 +321,10 @@ func (hw *hashicorpWallet) read(path string, queryParams map[string][]string) (*
 }
 
 type hashicorpError struct {
-	msg string
-	secret SecretData
+	msg       string
+	secret    Secret
 	walletUrl accounts.URL
-	err error
+	err       error
 }
 
 func (e hashicorpError) Error() string {
@@ -380,7 +335,7 @@ func (e hashicorpError) Error() string {
 	return fmt.Sprintf("%s: wallet %v, secret %v", e.msg, e.walletUrl, e.secret)
 }
 
-func (hw *hashicorpWallet) getAccount(secretData SecretData) (accounts.Account, error) {
+func (hw *hashicorpWallet) getAccount(secretData Secret) (accounts.Account, error) {
 	path, queryParams, err := secretData.toRequestData()
 
 	if err != nil {
@@ -446,7 +401,7 @@ func parseURL(url string) (accounts.URL, error) {
 }
 
 
-func (hw *hashicorpWallet) getPrivateKey(secretData SecretData) (*ecdsa.PrivateKey, error) {
+func (hw *hashicorpWallet) getPrivateKey(secretData Secret) (*ecdsa.PrivateKey, error) {
 	path, queryParams, err := secretData.toRequestData()
 
 	if err != nil {
@@ -487,7 +442,7 @@ func (hw *hashicorpWallet) getPrivateKey(secretData SecretData) (*ecdsa.PrivateK
 
 func (hw *hashicorpWallet) refreshAccounts() error {
 	accts := make([]accounts.Account, len(hw.secrets))
-	acctsScrtsMap := make(map[common.Address]SecretData)
+	acctsScrtsMap := make(map[common.Address]Secret)
 
 	for i, secret := range hw.secrets {
 		acct, err := hw.getAccount(secret)
@@ -515,8 +470,8 @@ func zeroKey(k *ecdsa.PrivateKey) {
 	}
 }
 
-func GenerateAndStore(config HashicorpConfig) (common.Address, error) {
-	hw, err := newHashicorpWallet(config.ClientData, config.Secrets)
+func GenerateAndStore(config WalletConfig) (common.Address, error) {
+	hw, err := newHashicorpWallet(config.Client, config.Secrets)
 
 	if err != nil {
 		return common.Address{}, err

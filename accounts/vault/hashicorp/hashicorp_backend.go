@@ -1,4 +1,4 @@
-package vault
+package hashicorp
 
 import (
 	"github.com/ethereum/go-ethereum/accounts"
@@ -12,15 +12,10 @@ type hashicorpBackend struct {
 	wallets []accounts.Wallet // A vault wallet contains all account keys stored in that particular vault and accessible with a particular auth token
 	updateFeed event.Feed
 	updateScope event.SubscriptionScope
-	hashicorpConfigs []HashicorpConfig
+	hashicorpConfigs []WalletConfig
 }
 
-type HashicorpConfig struct {
-	ClientData ClientData `toml:"Client,omitempty"`
-	Secrets    []SecretData `toml:"Secrets,omitempty"`
-}
-
-func NewHashicorpBackend(hashicorpConfigs []HashicorpConfig) *hashicorpBackend {
+func NewBackend(hashicorpConfigs []WalletConfig) *hashicorpBackend {
 	hb := &hashicorpBackend{hashicorpConfigs: hashicorpConfigs}
 	hb.refreshWallets()
 
@@ -62,7 +57,7 @@ func (hb *hashicorpBackend) refreshWallets() {
 	// The wallets for the keystore and hub backends can change frequently (e.g. files created/deleted in datadir, or USB devices connected/disconnected).  The Vault wallets have to be defined as part of the start up config.  As a result we only need to refresh wallets once, on startup - if the vault backend already has wallets then we know the accounts have been retrieved from the vaults on startup so we do not need to check again
 	if len(hb.wallets) == 0 {
 		for _, hc := range hb.hashicorpConfigs {
-			w, err := NewHashicorpWallet(hc.ClientData, hc.Secrets, &hb.updateFeed)
+			w, err := NewWallet(hc.Client, hc.Secrets, &hb.updateFeed)
 			//TODO review how to handle and add contextual info to msgs
 			if err != nil {
 				log.Warn("Unable to create Hashicorp wallet", err)

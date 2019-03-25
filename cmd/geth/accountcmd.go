@@ -18,7 +18,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/ethereum/go-ethereum/accounts/vault"
+	"github.com/ethereum/go-ethereum/accounts/vault/hashicorp"
 	"github.com/ethereum/go-ethereum/common"
 	"io/ioutil"
 
@@ -317,7 +317,7 @@ func accountCreate(ctx *cli.Context) error {
 
 	//using local bool (not global) here as Vault CLI options are currently only defined on accountcmd
 	if(ctx.Bool(utils.VaultFlag.Name)) {
-		address, error = createAcctInVault(cfg.Node.Vaults[0])
+		address, error = createAcctInVault(cfg.Node.HashicorpVaults[0])
 	} else {
 		scryptN, scryptP, keydir, err := cfg.Node.AccountConfig()
 
@@ -337,8 +337,8 @@ func accountCreate(ctx *cli.Context) error {
 	return nil
 }
 
-func createAcctInVault(cfg vault.HashicorpConfig) (common.Address, error) {
-	return vault.GenerateAndStore(cfg)
+func createAcctInVault(cfg hashicorp.WalletConfig) (common.Address, error) {
+	return hashicorp.GenerateAndStore(cfg)
 }
 
 // accountUpdate transitions an account from a previous format to the current

@@ -1,4 +1,4 @@
-package vault
+package hashicorp
 
 import (
 	"errors"
@@ -244,9 +244,9 @@ func (mockFactory) create() (clientI, error) {
 }
 
 func TestCloseReturnsStateToSameAsBeforeOpen(t *testing.T) {
-	hw, err := NewHashicorpWallet(
-		ClientData{Url: "http://someurl"},
-		[]SecretData{{Name: "somesecret"}},
+	hw, err := NewWallet(
+		ClientConfig{Url: "http://someurl"},
+		[]Secret{{Name: "somesecret"}},
 		&event.Feed{},
 	)
 
@@ -283,9 +283,9 @@ func TestCloseReturnsStateToSameAsBeforeOpen(t *testing.T) {
 }
 
 func TestCloseDoesNothingIfNoClientInWallet(t *testing.T) {
-	hw, err := NewHashicorpWallet(
-		ClientData{Url: "http://someurl"},
-		[]SecretData{{Name: "somesecret"}},
+	hw, err := NewWallet(
+		ClientConfig{Url: "http://someurl"},
+		[]Secret{{Name: "somesecret"}},
 		&event.Feed{},
 	)
 
@@ -501,12 +501,12 @@ func TestGetAccount(t *testing.T) {
 		client: &clientMock{
 			r: mockReadWithData,
 		},
-		clientData: ClientData{
+		clientData: ClientConfig{
 			Url: clientUrl,
 		},
 	}
 
-	secret := SecretData{Name: "name", SecretEngine: "engine", Version: 0, AccountID: "account", KeyID: "key"}
+	secret := Secret{Name: "name", SecretEngine: "engine", Version: 0, AccountID: "account", KeyID: "key"}
 
 	got, err := hw.getAccount(secret)
 
@@ -542,12 +542,12 @@ func TestGetPrivateKey(t *testing.T) {
 		client: &clientMock{
 			r: mockReadWithData,
 		},
-		clientData: ClientData{
+		clientData: ClientConfig{
 			Url: clientUrl,
 		},
 	}
 
-	secret := SecretData{Name: "name", SecretEngine: "engine", Version: 0, AccountID: "account", KeyID: "key"}
+	secret := Secret{Name: "name", SecretEngine: "engine", Version: 0, AccountID: "account", KeyID: "key"}
 
 	got, err := hw.getPrivateKey(secret)
 
@@ -566,62 +566,3 @@ func TestGetPrivateKey(t *testing.T) {
 	}
 }
 
-//func TestRead(t *testing.T) {
-//	c := clientMock{}
-//	hw := hashicorpWallet{client: c}
-//
-//	secretEngineName, secretName := "engine", "name"
-//	secretVersion := 1
-//
-//	secret, err := hw.read(secretEngineName, secretName, secretVersion)
-//
-//	if(err != nil) {
-//		t.Errorf("Error %v", err)
-//	}
-//
-//	path, pok := secret.Data["path"]
-//	data, dok := secret.Data["data"]
-//
-//
-//	if(!pok || !dok) {
-//		t.Errorf("Expected map returned from mock test object to include path and data keys")
-//	}
-//
-//	expectedPath := secretEngineName + "/data/" + secretName
-//
-//	if(path != expectedPath) {
-//		t.Errorf("Incorrect path created by Read\nwant: %v\ngot : %v", expectedPath, path)
-//	}
-//
-//	expectedData := make(map[string][]string)
-//	expectedData["version"] = []string{strconv.Itoa(secretVersion)}
-//
-//	if(!reflect.DeepEqual(data, expectedData)) {
-//		t.Errorf("Incorrect query param data created by Read\nwant: %v\ngot : %v", expectedData, data)
-//	}
-//}
-//
-//var readVersionTests = []struct {
-//	version int
-//	wantErr bool
-//} {
-//	{0, false},
-//	{1, false},
-//	{-1, true},
-//}
-//func TestReadVersionMustBe0OrPositiveInteger(t *testing.T) {
-//	c := clientMock{}
-//	hw := hashicorpWallet{client: c}
-//
-//	engine, name := "engine", "name"
-//
-//	for _, tt := range readVersionTests {
-//		t.Run(fmt.Sprintf("%d", tt.version), func(t *testing.T) {
-//			_, err := hw.read(engine, name, tt.version)
-//
-//			if tt.wantErr == (err == nil) {
-//				t.Errorf("version = %v not handled as expected\nwant: error = %v\ngot : error %#v", tt.version, tt.wantErr, err)
-//			}
-//		})
-//	}
-//}
