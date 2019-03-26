@@ -21,6 +21,7 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"github.com/ethereum/go-ethereum/accounts/vault/hashicorp"
+	"github.com/ethereum/go-ethereum/accounts/vault/envvars"
 	"io/ioutil"
 	"math/big"
 	"os"
@@ -130,47 +131,44 @@ var (
 	}
 	HashicorpFlag = cli.BoolFlag{
 		Name: "hashicorp",
-		Usage: "TODO",
+		Usage: "Store the newly created account in a Hashicorp Vault",
 	}
 	HashicorpUrlFlag = cli.StringFlag{
 		Name:  "hashicorp.url",
-		Usage: "TODO",
+		Usage: "Address of the Vault server expressed as a URL and port, for example: https://127.0.0.1:8200/",
 	}
 	HashicorpApproleFlag = cli.StringFlag{
 		Name:  "hashicorp.approle",
-		Usage: "TODO",
+		Usage: fmt.Sprintf("Vault path for an enabled Approle auth method (requires %v and %v env vars to be set)", envvars.VaultRoleId, envvars.VaultSecretId),
+		Value: "approle",
 	}
 	HashicorpClientCertFlag = cli.StringFlag{
 		Name:  "hashicorp.clientcert",
-		Usage: "TODO",
+		Usage: "Path to a PEM-encoded client certificate. Required when communicating with the Vault server using TLS",
 	}
 	HashicorpClientKeyFlag = cli.StringFlag{
 		Name:  "hashicorp.clientkey",
-		Usage: "TODO",
+		Usage: "Path to an unencrypted, PEM-encoded private key which corresponds to the matching client certificate",
 	}
 	HashicorpCaCertFlag = cli.StringFlag{
 		Name:  "hashicorp.cacert",
-		Usage: "TODO",
-	}
-	HashicorpNameFlag = cli.StringFlag{
-		Name:  "hashicorp.name",
-		Usage: "TODO",
+		Usage: "Path to a PEM-encoded CA certificate file. Used to verify the Vault server's SSL certificate",
 	}
 	HashicorpEngineFlag = cli.StringFlag{
 		Name:  "hashicorp.engine",
-		Usage: "TODO",
+		Usage: "Vault path for an enabled KV v2 secret engine",
 	}
-	HashicorpVersionFlag = cli.StringFlag{
-		Name:  "hashicorp.version",
-		Usage: "TODO",
+	HashicorpNameFlag = cli.StringFlag{
+		Name:  "hashicorp.name",
+			Usage: "Vault path for a new or existing KV secret.  Any existing secret at the path will be overwritten",
 	}
 	HashicorpAccountIdFlag = cli.StringFlag{
 		Name:  "hashicorp.accountid",
-		Usage: "TODO",
+		Usage: "ID for account/address component of Vault secret",
 	}
 	HashicorpKeyIdFlag = cli.StringFlag{
 		Name:  "hashicorp.keyid",
-		Usage: "TODO",
+		Usage: "ID for private key component of Vault secret",
 	}
 	NetworkIdFlag = cli.Uint64Flag{
 		Name:  "networkid",
@@ -1122,9 +1120,6 @@ func setHashicorpVault(ctx *cli.Context, cfg *node.Config) {
 	}
 	if ctx.IsSet(HashicorpEngineFlag.Name) {
 		s[0].SecretEngine = ctx.String(HashicorpEngineFlag.Name)
-	}
-	if ctx.IsSet(HashicorpVersionFlag.Name) {
-		s[0].Version = ctx.Int(HashicorpVersionFlag.Name)
 	}
 	if ctx.IsSet(HashicorpAccountIdFlag.Name) {
 		s[0].AccountID = ctx.String(HashicorpAccountIdFlag.Name)

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
+	"github.com/ethereum/go-ethereum/accounts/vault/envvars"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -125,12 +126,6 @@ func (hw *hashicorpWallet) Status() (string, error) {
 	return walletOpen, nil
 }
 
-const (
-	vaultRoleId = "VAULT_ROLE_ID"
-	vaultSecretId = "VAULT_SECRET_ID"
-	vaultApprolePath = "VAULT_APPROLE_PATH"
-)
-
 // Open implements accounts.Wallet, creating an authenticated Client and making it accessible to the wallet to enable vault operations.
 //
 // If Approle credentials have been provided these will be used to authenticate the Client with the vault, else the Token will be used.
@@ -162,23 +157,19 @@ func (hw *hashicorpWallet) Open(passphrase string) error {
 
 	// If the roleID and secretID environment variables are present, these will be used to authenticate the client and replace the default VAULT_TOKEN value
 	// As using Approle is preferred over using the standalone token, an error will be returned if only one of these environment variables is set
-	roleId, rIdOk := os.LookupEnv(vaultRoleId)
-	secretId, sIdOk := os.LookupEnv(vaultSecretId)
+	roleId, rIdOk := os.LookupEnv(envvars.VaultRoleId)
+	secretId, sIdOk := os.LookupEnv(envvars.VaultSecretId)
 
 	if rIdOk != sIdOk {
-		return fmt.Errorf("both %q and %q environment variables must be set to use Approle authentication", vaultRoleId, vaultSecretId)
+		return fmt.Errorf("both %q and %q environment variables must be set to use Approle authentication", envvars.VaultRoleId, envvars.VaultSecretId)
 	}
 
 	if rIdOk && sIdOk {
 		authData := map[string]interface{} {"role_id": roleId, "secret_id": secretId}
 
-		approlePath, apOk := os.LookupEnv(vaultApprolePath)
-
-		if !apOk {
-			approlePath = "approle"
+		if hw.clientData.Approle == "" {
+			hw.clientData.Approle = "approle"
 		}
-
-		hw.clientData.Approle = approlePath
 
 		authResponse, err := hw.client.Logical().Write(fmt.Sprintf("auth/%s/login", hw.clientData.Approle), authData)
 

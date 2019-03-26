@@ -288,9 +288,8 @@ var HashicorpVaultFlags = []cli.Flag {
 	utils.HashicorpClientCertFlag,
 	utils.HashicorpClientKeyFlag,
 	utils.HashicorpCaCertFlag,
-	utils.HashicorpNameFlag,
 	utils.HashicorpEngineFlag,
-	utils.HashicorpVersionFlag,
+	utils.HashicorpNameFlag,
 	utils.HashicorpAccountIdFlag,
 	utils.HashicorpKeyIdFlag,
 }
