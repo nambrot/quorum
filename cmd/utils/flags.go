@@ -20,7 +20,7 @@ package utils
 import (
 	"crypto/ecdsa"
 	"fmt"
-	"github.com/ethereum/go-ethereum/accounts/vault"
+	"github.com/ethereum/go-ethereum/accounts/vault/hashicorp"
 	"io/ioutil"
 	"math/big"
 	"os"
@@ -128,48 +128,48 @@ var (
 		Name:  "nousb",
 		Usage: "Disables monitoring for and managing USB hardware wallets",
 	}
-	VaultFlag = cli.BoolFlag{
-		Name: "vault",
+	HashicorpFlag = cli.BoolFlag{
+		Name: "hashicorp",
 		Usage: "TODO",
 	}
-	VaultUrlFlag = cli.StringFlag{
-		Name:  "vaulturl",
+	HashicorpUrlFlag = cli.StringFlag{
+		Name:  "hashicorp.url",
 		Usage: "TODO",
 	}
-	VaultApproleFlag = cli.StringFlag{
-		Name:  "vaultapprole",
+	HashicorpApproleFlag = cli.StringFlag{
+		Name:  "hashicorp.approle",
 		Usage: "TODO",
 	}
-	VaultClientCertFlag = cli.StringFlag{
-		Name:  "vaultclientcert",
+	HashicorpClientCertFlag = cli.StringFlag{
+		Name:  "hashicorp.clientcert",
 		Usage: "TODO",
 	}
-	VaultClientKeyFlag = cli.StringFlag{
-		Name:  "vaultclientkey",
+	HashicorpClientKeyFlag = cli.StringFlag{
+		Name:  "hashicorp.clientkey",
 		Usage: "TODO",
 	}
-	VaultCaCertFlag = cli.StringFlag{
-		Name:  "vaultcacert",
+	HashicorpCaCertFlag = cli.StringFlag{
+		Name:  "hashicorp.cacert",
 		Usage: "TODO",
 	}
-	VaultSecretNameFlag = cli.StringFlag{
-		Name:  "vaultsecretname",
+	HashicorpNameFlag = cli.StringFlag{
+		Name:  "hashicorp.name",
 		Usage: "TODO",
 	}
-	VaultSecretEngineFlag = cli.StringFlag{
-		Name:  "vaultsecretengine",
+	HashicorpEngineFlag = cli.StringFlag{
+		Name:  "hashicorp.engine",
 		Usage: "TODO",
 	}
-	VaultSecretVersionFlag = cli.StringFlag{
-		Name:  "vaultsecretversion",
+	HashicorpVersionFlag = cli.StringFlag{
+		Name:  "hashicorp.version",
 		Usage: "TODO",
 	}
-	VaultSecretPublicKeyIdFlag = cli.StringFlag{
-		Name:  "vaultsecretpublickeyid",
+	HashicorpAccountIdFlag = cli.StringFlag{
+		Name:  "hashicorp.accountid",
 		Usage: "TODO",
 	}
-	VaultSecretPrivateKeyIdFlag = cli.StringFlag{
-		Name:  "vaultsecretprivatekeyid",
+	HashicorpKeyIdFlag = cli.StringFlag{
+		Name:  "hashicorp.keyid",
 		Usage: "TODO",
 	}
 	NetworkIdFlag = cli.Uint64Flag{
@@ -1090,51 +1090,51 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 		cfg.NoUSB = ctx.GlobalBool(NoUSBFlag.Name)
 	}
 
-	if ctx.Bool(VaultFlag.Name) {
-		setVault(ctx, cfg)
+	if ctx.Bool(HashicorpFlag.Name) {
+		setHashicorpVault(ctx, cfg)
 	}
 
 }
 
-// setVault uses CLI options to set the config for a single Vault with a single key
-func setVault(ctx *cli.Context, cfg *node.Config) {
-	c := vault.ClientData{}
-	s := make([]vault.SecretData, 1)
-	s[0] = vault.SecretData{}
+// setHashicorpVault uses CLI options to set the config for a single Vault with a single key
+func setHashicorpVault(ctx *cli.Context, cfg *node.Config) {
+	c := hashicorp.ClientConfig{}
+	s := make([]hashicorp.Secret, 1)
+	s[0] = hashicorp.Secret{}
 
-	if ctx.IsSet(VaultUrlFlag.Name) {
-		c.Url = ctx.String(VaultUrlFlag.Name)
+	if ctx.IsSet(HashicorpUrlFlag.Name) {
+		c.Url = ctx.String(HashicorpUrlFlag.Name)
 	}
-	if ctx.IsSet(VaultApproleFlag.Name) {
-		c.Approle = ctx.String(VaultApproleFlag.Name)
+	if ctx.IsSet(HashicorpApproleFlag.Name) {
+		c.Approle = ctx.String(HashicorpApproleFlag.Name)
 	}
-	if ctx.IsSet(VaultClientCertFlag.Name) {
-		c.ClientCert = ctx.String(VaultClientCertFlag.Name)
+	if ctx.IsSet(HashicorpClientCertFlag.Name) {
+		c.ClientCert = ctx.String(HashicorpClientCertFlag.Name)
 	}
-	if ctx.IsSet(VaultClientKeyFlag.Name) {
-		c.ClientKey = ctx.String(VaultClientKeyFlag.Name)
+	if ctx.IsSet(HashicorpClientKeyFlag.Name) {
+		c.ClientKey = ctx.String(HashicorpClientKeyFlag.Name)
 	}
-	if ctx.IsSet(VaultCaCertFlag.Name) {
-		c.CaCert = ctx.String(VaultCaCertFlag.Name)
+	if ctx.IsSet(HashicorpCaCertFlag.Name) {
+		c.CaCert = ctx.String(HashicorpCaCertFlag.Name)
 	}
-	if ctx.IsSet(VaultSecretNameFlag.Name) {
-		s[0].Name = ctx.String(VaultSecretNameFlag.Name)
+	if ctx.IsSet(HashicorpNameFlag.Name) {
+		s[0].Name = ctx.String(HashicorpNameFlag.Name)
 	}
-	if ctx.IsSet(VaultSecretEngineFlag.Name) {
-		s[0].SecretEngine = ctx.String(VaultSecretEngineFlag.Name)
+	if ctx.IsSet(HashicorpEngineFlag.Name) {
+		s[0].SecretEngine = ctx.String(HashicorpEngineFlag.Name)
 	}
-	if ctx.IsSet(VaultSecretVersionFlag.Name) {
-		s[0].Version = ctx.Int(VaultSecretVersionFlag.Name)
+	if ctx.IsSet(HashicorpVersionFlag.Name) {
+		s[0].Version = ctx.Int(HashicorpVersionFlag.Name)
 	}
-	if ctx.IsSet(VaultSecretPublicKeyIdFlag.Name) {
-		s[0].AccountID = ctx.String(VaultSecretPublicKeyIdFlag.Name)
+	if ctx.IsSet(HashicorpAccountIdFlag.Name) {
+		s[0].AccountID = ctx.String(HashicorpAccountIdFlag.Name)
 	}
-	if ctx.IsSet(VaultSecretPrivateKeyIdFlag.Name) {
-		s[0].KeyID = ctx.String(VaultSecretPrivateKeyIdFlag.Name)
+	if ctx.IsSet(HashicorpKeyIdFlag.Name) {
+		s[0].KeyID = ctx.String(HashicorpKeyIdFlag.Name)
 	}
 
-	cfg.Vaults = make([]vault.HashicorpConfig, 1)
-	cfg.Vaults[0] = vault.HashicorpConfig{ClientData: c, Secrets: s}
+	cfg.HashicorpVaults = make([]hashicorp.WalletConfig, 1)
+	cfg.HashicorpVaults[0] = hashicorp.WalletConfig{Client: c, Secrets: s}
 }
 
 func setGPO(ctx *cli.Context, cfg *gasprice.Config) {

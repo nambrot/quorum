@@ -70,17 +70,6 @@ type hashicorpWallet struct {
 }
 
 func NewWallet(clientData ClientConfig, secrets []Secret, updateFeed *event.Feed) (*hashicorpWallet, error) {
-	hw, err := newHashicorpWallet(clientData, secrets)
-	hw.updateFeed = updateFeed
-	hw.logger = log.New("url", hw.url)
-	hw.clientFactory = defaultClientFactory{}
-
-	return hw, err
-}
-
-// TODO revisit comment
-// separate method so that it can be used to create full wallet and for geth account new
-func newHashicorpWallet(clientData ClientConfig, secrets []Secret) (*hashicorpWallet, error) {
 	url, err := parseURL(clientData.Url)
 
 	if err != nil {
@@ -91,6 +80,9 @@ func newHashicorpWallet(clientData ClientConfig, secrets []Secret) (*hashicorpWa
 		clientData: clientData,
 		secrets: secrets,
 		url: url,
+		clientFactory: defaultClientFactory{},
+		updateFeed: updateFeed,
+		logger: log.New("url", url),
 	}
 
 	return hw, nil
@@ -471,7 +463,7 @@ func zeroKey(k *ecdsa.PrivateKey) {
 }
 
 func GenerateAndStore(config WalletConfig) (common.Address, error) {
-	hw, err := newHashicorpWallet(config.Client, config.Secrets)
+	hw, err := NewWallet(config.Client, config.Secrets, &event.Feed{})
 
 	if err != nil {
 		return common.Address{}, err

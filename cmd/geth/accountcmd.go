@@ -107,22 +107,13 @@ Print a short summary of all accounts`,
 				Name:   "new",
 				Usage:  "Create a new account",
 				Action: utils.MigrateFlags(accountCreate),
-				Flags: []cli.Flag{
+				Flags: append(
+					HashicorpVaultFlags,
 					utils.DataDirFlag,
 					utils.KeyStoreDirFlag,
 					utils.PasswordFileFlag,
 					utils.LightKDFFlag,
-					utils.VaultFlag,
-					utils.VaultUrlFlag,
-					utils.VaultApproleFlag,
-					utils.VaultClientCertFlag,
-					utils.VaultClientKeyFlag,
-					utils.VaultCaCertFlag,
-					utils.VaultSecretNameFlag,
-					utils.VaultSecretEngineFlag,
-					utils.VaultSecretPublicKeyIdFlag,
-					utils.VaultSecretPrivateKeyIdFlag,
-				},
+				),
 				Description: `
     geth account new
 
@@ -316,7 +307,7 @@ func accountCreate(ctx *cli.Context) error {
 	var error error
 
 	//using local bool (not global) here as Vault CLI options are currently only defined on accountcmd
-	if(ctx.Bool(utils.VaultFlag.Name)) {
+	if(ctx.Bool(utils.HashicorpFlag.Name)) {
 		address, error = createAcctInVault(cfg.Node.HashicorpVaults[0])
 	} else {
 		scryptN, scryptP, keydir, err := cfg.Node.AccountConfig()
