@@ -17,7 +17,7 @@ type hashicorpBackend struct {
 
 func NewBackend(hashicorpConfigs []WalletConfig) *hashicorpBackend {
 	hb := &hashicorpBackend{hashicorpConfigs: hashicorpConfigs}
-	hb.refreshWallets()
+	hb.createWallets()
 
 	return hb
 }
@@ -25,9 +25,10 @@ func NewBackend(hashicorpConfigs []WalletConfig) *hashicorpBackend {
 func (hb *hashicorpBackend) Wallets() []accounts.Wallet {
 	// check connection to vault is still up before returning wallet
 	// update list of accounts in wallets to cover the instances where secrets have been updated/deleted
+	hb.refreshWallets()
+
 	hb.stateLock.RLock()
 	defer hb.stateLock.RUnlock()
-
 	cpy := make([]accounts.Wallet, len(hb.wallets))
 	copy(cpy, hb.wallets)
 
@@ -45,9 +46,7 @@ func (hb *hashicorpBackend) Subscribe(sink chan<- accounts.WalletEvent) event.Su
 	return sub
 }
 
-func (hb *hashicorpBackend) refreshWallets() {
-	// Check which wallets have been added/dropped and raise corresponding events
-	// Update hb.wallets with refreshed wallets
+func (hb *hashicorpBackend) createWallets() {
 	hb.stateLock.Lock()
 	defer hb.stateLock.Unlock()
 
@@ -64,11 +63,6 @@ func (hb *hashicorpBackend) refreshWallets() {
 				return
 			}
 
-			if err = w.refreshAccounts(); err != nil {
-				log.Warn("Unable to refresh accounts")
-				return
-			}
-
 			events = append(events, accounts.WalletEvent{w, accounts.WalletArrived})
 			wallets = append(wallets, w)
 		}
@@ -78,6 +72,32 @@ func (hb *hashicorpBackend) refreshWallets() {
 		}
 
 		hb.wallets = wallets
+	}
+}
+
+func (hb *hashicorpBackend) refreshWallets() {
+	// Check which wallets have been added/dropped and raise corresponding events
+	// Update hb.wallets with refreshed wallets
+	hb.stateLock.Lock()
+	defer hb.stateLock.Unlock()
+
+	//TODO Wallets should be created before being refreshed
+	if len(hb.wallets) == 0 {
+		return
+	}
+
+	for _, w := range hb.wallets {
+		hw, ok := w.(*hashicorpWallet)
+
+		if !ok {
+			log.Warn("Hashicorp backend contains Wallet of incompatible type %T", w) //TODO does log work in same way as Printf?
+			return
+		}
+
+		if err := hw.refreshAccounts(); err != nil {
+			log.Warn("Unable to refresh accounts", "err", err.Error())
+			return
+		}
 	}
 
 }

@@ -207,6 +207,13 @@ func (hw *hashicorpWallet) Close() error {
 
 // Account implements accounts.Wallet, returning the accounts specified in config that are stored in the vault.  refreshAccounts() retrieves the list of accounts from the vault and so must have been called prior to this method in order to return a non-empty slice
 func (hw *hashicorpWallet) Accounts() []accounts.Account {
+	//TODO mutex?
+	err := hw.refreshAccounts()
+
+	if err != nil {
+		hw.logger.Error("Unable to get accounts", "err", err)
+	}
+
 	hw.stateLock.RLock()
 	defer hw.stateLock.RUnlock()
 
@@ -424,6 +431,17 @@ func (hw *hashicorpWallet) getPrivateKey(secretData Secret) (*ecdsa.PrivateKey, 
 }
 
 func (hw *hashicorpWallet) refreshAccounts() error {
+	// All accounts have already been retrieved so we do not need to retrieve them again
+	if len(hw.accounts) == len(hw.secrets) {
+		return nil
+	}
+
+	if status, err := hw.Status(); status == walletClosed {
+		return errors.New("Wallet closed")
+	} else if err != nil {
+		return err
+	}
+
 	accts := make([]accounts.Account, len(hw.secrets))
 	acctsScrtsMap := make(map[common.Address]Secret)
 
