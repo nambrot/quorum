@@ -21,7 +21,6 @@ type vaultWallet struct {
 	url               accounts.URL
 	accounts          []accounts.Account
 	updateFeed        *event.Feed
-	logger            log.Logger
 }
 
 type VaultService interface {
@@ -81,7 +80,8 @@ func (w *vaultWallet) Accounts() []accounts.Account {
 	accts, err := w.vault.getAccounts()
 
 	if err != nil {
-		w.logger.Error("Unable to get accounts", "err", err)
+		log.Warn("Unable to get accounts", "err", err)
+		return nil
 	}
 
 	w.stateLock.Lock()
