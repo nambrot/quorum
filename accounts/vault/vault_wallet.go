@@ -2,10 +2,7 @@ package vault
 
 import (
 	"crypto/ecdsa"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
-	"fmt"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
@@ -13,8 +10,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/hashicorp/vault/api"
-	"io"
 	"math/big"
 	"strings"
 	"sync"
@@ -207,71 +202,43 @@ func zeroKey(k *ecdsa.PrivateKey) {
 	}
 }
 
-func GenerateAndStore(config WalletConfig) (common.Address, error) {
-	hw, err := NewWallet(config.Client, config.Secrets, &event.Feed{})
-
-	if err != nil {
-		return common.Address{}, err
-	}
-
-	err = hw.Open("")
-
-	if err != nil {
-		return common.Address{}, err
-	}
-
-	if status, err := hw.Status(); err != nil {
-		return common.Address{}, err
-	} else if status != walletOpen {
-		return common.Address{}, fmt.Errorf("error creating Vault client, %v", status)
-	}
-
-	key, err := generateKey(rand.Reader)
-	if err != nil {
-		return common.Address{}, err
-	}
-	defer zeroKey(key)
-
-	address, err := hw.storeKey(key)
-	if err != nil {
-		return common.Address{}, err
-	}
-
-	return address, nil
-}
-
-func generateKey(r io.Reader) (*ecdsa.PrivateKey, error) {
-	privateKeyECDSA, err := ecdsa.GenerateKey(crypto.S256(), r)
-	if err != nil {
-		return nil, err
-	}
-	return privateKeyECDSA, nil
-}
-
-func (hw *hashicorpWallet) storeKey(key *ecdsa.PrivateKey) (common.Address, error) {
-	address := crypto.PubkeyToAddress(key.PublicKey)
-	addrHex := address.Hex()
-
-	if strings.HasPrefix(addrHex, "0x") {
-		addrHex = strings.Replace(addrHex, "0x", "", 1)
-	}
-
-	keyBytes := crypto.FromECDSA(key)
-	keyHex := hex.EncodeToString(keyBytes)
-
-	s := hw.secrets[0]
-
-	path := fmt.Sprintf("%s/data/%s", s.SecretEngine, s.Name)
-
-	data := make(map[string]interface{})
-	data["data"] = map[string]interface{}{
-		s.AccountID: addrHex,
-		s.KeyID:     keyHex,
-	}
-
-	if _, err := hw.client.Logical().Write(path, data); err != nil {
-		return common.Address{}, hashicorpError{"unable to write secret to vault", s, hw.url, err}
-	}
-
-	return address, nil
-}
+//func GenerateAndStore(config WalletConfig) (common.Address, error) {
+//	hw, err := NewWallet(config.Client, config.Secrets, &event.Feed{})
+//
+//	if err != nil {
+//		return common.Address{}, err
+//	}
+//
+//	err = hw.Open("")
+//
+//	if err != nil {
+//		return common.Address{}, err
+//	}
+//
+//	if status, err := hw.Status(); err != nil {
+//		return common.Address{}, err
+//	} else if status != walletOpen {
+//		return common.Address{}, fmt.Errorf("error creating Vault client, %v", status)
+//	}
+//
+//	key, err := generateKey(rand.Reader)
+//	if err != nil {
+//		return common.Address{}, err
+//	}
+//	defer zeroKey(key)
+//
+//	address, err := hw.storeKey(key)
+//	if err != nil {
+//		return common.Address{}, err
+//	}
+//
+//	return address, nil
+//}
+//
+//func generateKey(r io.Reader) (*ecdsa.PrivateKey, error) {
+//	privateKeyECDSA, err := ecdsa.GenerateKey(crypto.S256(), r)
+//	if err != nil {
+//		return nil, err
+//	}
+//	return privateKeyECDSA, nil
+//}

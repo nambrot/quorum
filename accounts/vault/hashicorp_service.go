@@ -2,6 +2,7 @@ package vault
 
 import (
 	"crypto/ecdsa"
+	"encoding/hex"
 	"fmt"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/vault/envvars"
@@ -10,6 +11,7 @@ import (
 	"github.com/hashicorp/vault/api"
 	"github.com/pkg/errors"
 	"os"
+	"strings"
 	"sync"
 )
 
@@ -260,7 +262,30 @@ func (s *hashicorpService) GetPrivateKey(account accounts.Account) (*ecdsa.Priva
 	return key, nil
 }
 
-func (*hashicorpService) Store(key *ecdsa.PrivateKey) (common.Address, error) {
-	panic("implement me")
-}
+func (s *hashicorpService) Store(key *ecdsa.PrivateKey) (common.Address, error) {
+	address := crypto.PubkeyToAddress(key.PublicKey)
+	addrHex := address.Hex()
 
+	if strings.HasPrefix(addrHex, "0x") {
+		addrHex = strings.Replace(addrHex, "0x", "", 1)
+	}
+
+	keyBytes := crypto.FromECDSA(key)
+	keyHex := hex.EncodeToString(keyBytes)
+
+	secret := s .secrets[0]
+
+	path := fmt.Sprintf("%s/data/%s", secret.SecretEngine, secret.Name)
+
+	data := make(map[string]interface{})
+	data["data"] = map[string]interface{}{
+		secret.AccountID: addrHex,
+		secret.KeyID:     keyHex,
+	}
+
+	if _, err := s.client.Logical().Write(path, data); err != nil {
+		return common.Address{}, errors.WithMessage(err, "unable to write secret to vault")
+	}
+
+	return address, nil
+}
