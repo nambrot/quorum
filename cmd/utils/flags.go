@@ -20,7 +20,7 @@ package utils
 import (
 	"crypto/ecdsa"
 	"fmt"
-	"github.com/ethereum/go-ethereum/accounts/vault/hashicorp"
+	"github.com/ethereum/go-ethereum/accounts/vault"
 	"github.com/ethereum/go-ethereum/accounts/vault/envvars"
 	"io/ioutil"
 	"math/big"
@@ -1096,9 +1096,9 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 
 // setHashicorpVault uses CLI options to set the config for a single Vault with a single key
 func setHashicorpVault(ctx *cli.Context, cfg *node.Config) {
-	c := hashicorp.ClientConfig{}
-	s := make([]hashicorp.Secret, 1)
-	s[0] = hashicorp.Secret{}
+	c := vault.HashicorpClientConfig{}
+	s := make([]vault.HashicorpSecret, 1)
+	s[0] = vault.HashicorpSecret{}
 
 	if ctx.IsSet(HashicorpUrlFlag.Name) {
 		c.Url = ctx.String(HashicorpUrlFlag.Name)
@@ -1128,8 +1128,8 @@ func setHashicorpVault(ctx *cli.Context, cfg *node.Config) {
 		s[0].KeyID = ctx.String(HashicorpKeyIdFlag.Name)
 	}
 
-	cfg.HashicorpVaults = make([]hashicorp.WalletConfig, 1)
-	cfg.HashicorpVaults[0] = hashicorp.WalletConfig{Client: c, Secrets: s}
+	cfg.HashicorpVaults = make([]vault.HashicorpWalletConfig, 1)
+	cfg.HashicorpVaults[0] = vault.HashicorpWalletConfig{Client: c, Secrets: s}
 }
 
 func setGPO(ctx *cli.Context, cfg *gasprice.Config) {

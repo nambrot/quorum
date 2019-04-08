@@ -12,10 +12,10 @@ type hashicorpBackend struct {
 	wallets []accounts.Wallet // A vault wallet contains all account keys stored in that particular vault and accessible with a particular auth token
 	updateFeed event.Feed
 	updateScope event.SubscriptionScope
-	hashicorpConfigs []WalletConfig
+	hashicorpConfigs []HashicorpWalletConfig
 }
 
-func NewBackend(hashicorpConfigs []WalletConfig) *hashicorpBackend {
+func NewHashicorpBackend(hashicorpConfigs []HashicorpWalletConfig) *hashicorpBackend {
 	hb := &hashicorpBackend{hashicorpConfigs: hashicorpConfigs}
 	hb.createWallets()
 
@@ -53,7 +53,7 @@ func (hb *hashicorpBackend) createWallets() {
 	}
 }
 
-func NewHashicorpVaultWallet(config WalletConfig, updateFeed *event.Feed) (*vaultWallet, error) {
+func NewHashicorpVaultWallet(config HashicorpWalletConfig, updateFeed *event.Feed) (*vaultWallet, error) {
 	url, err := parseURL(config.Client.Url)
 
 	if err != nil {

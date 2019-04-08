@@ -20,7 +20,7 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"github.com/ethereum/go-ethereum/accounts/usbwallet"
-	"github.com/ethereum/go-ethereum/accounts/vault/hashicorp"
+	"github.com/ethereum/go-ethereum/accounts/vault"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -80,7 +80,7 @@ type Config struct {
 	// is created by New and destroyed when the node is stopped.
 	KeyStoreDir string `toml:",omitempty"`
 
-	HashicorpVaults []hashicorp.WalletConfig `toml:",omitempty"`
+	HashicorpVaults []vault.HashicorpWalletConfig `toml:",omitempty"`
 
 	// UseLightweightKDF lowers the memory and CPU requirements of the key store
 	// scrypt KDF at the expense of security.
@@ -444,7 +444,7 @@ func makeAccountManager(conf *Config) (*accounts.Manager, string, error) {
 	}
 
 	if conf.HashicorpVaults != nil {
-		vaultBackend := hashicorp.NewBackend(conf.HashicorpVaults)
+		vaultBackend := vault.NewHashicorpBackend(conf.HashicorpVaults)
 		backends = append(backends, vaultBackend)
 	}
 

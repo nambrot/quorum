@@ -17,14 +17,14 @@ import (
 
 type hashicorpService struct {
 	clientFactory func() (clientI, error)
-	clientConfig ClientConfig
-	secrets []Secret
+	clientConfig HashicorpClientConfig
+	secrets []HashicorpSecret
 	stateLock sync.RWMutex
 	client clientI
-	secretsByAccount map[accounts.Account]Secret
+	secretsByAccount map[accounts.Account]HashicorpSecret
 }
 
-func NewHashicorpService(clientConfig ClientConfig, secrets []Secret) VaultService {
+func NewHashicorpService(clientConfig HashicorpClientConfig, secrets []HashicorpSecret) VaultService {
 	return &hashicorpService{
 		clientFactory: createDefaultClient,
 		clientConfig: clientConfig,
@@ -148,9 +148,9 @@ func (s *hashicorpService) getAccounts() ([]accounts.Account, error) {
 		return nil, err
 	}
 
-	secretsByAccount := make(map[accounts.Account]Secret)
+	secretsByAccount := make(map[accounts.Account]HashicorpSecret)
 
-	for i, secret := range s.secrets {
+	for _, secret := range s.secrets {
 		acct, err := s.getAccount(secret)
 
 		if err != nil {
@@ -175,7 +175,7 @@ func (s *hashicorpService) getAccounts() ([]accounts.Account, error) {
 	return accts, nil
 }
 
-func (s *hashicorpService) getAccount(secret Secret) (accounts.Account, error) {
+func (s *hashicorpService) getAccount(secret HashicorpSecret) (accounts.Account, error) {
 	path, queryParams, err := secret.toRequestData()
 
 	if err != nil {
