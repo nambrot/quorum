@@ -369,26 +369,26 @@ func (hw *hashicorpWallet) getAccount(secretData Secret) (accounts.Account, erro
 	return accounts.Account{Address: common.HexToAddress(strAcct), URL: url}, nil
 }
 
-func zeroSecretData(data *interface{}) {
-	data = nil
-}
-
-func zeroSecret(secret *api.Secret) {
-	secret = nil
-}
-
-// TODO Duplicated code from url.go
-// parseURL converts a user supplied URL into the accounts specific structure.
-func parseURL(url string) (accounts.URL, error) {
-	parts := strings.Split(url, "://")
-	if len(parts) != 2 || parts[0] == "" {
-		return accounts.URL{}, errors.New("protocol scheme missing")
-	}
-	return accounts.URL {
-		Scheme: parts[0],
-		Path:   parts[1],
-	}, nil
-}
+//func zeroSecretData(data *interface{}) {
+//	data = nil
+//}
+//
+//func zeroSecret(secret *api.Secret) {
+//	secret = nil
+//}
+//
+//// TODO Duplicated code from url.go
+//// parseURL converts a user supplied URL into the accounts specific structure.
+//func parseURL(url string) (accounts.URL, error) {
+//	parts := strings.Split(url, "://")
+//	if len(parts) != 2 || parts[0] == "" {
+//		return accounts.URL{}, errors.New("protocol scheme missing")
+//	}
+//	return accounts.URL {
+//		Scheme: parts[0],
+//		Path:   parts[1],
+//	}, nil
+//}
 
 
 func (hw *hashicorpWallet) getPrivateKey(secretData Secret) (*ecdsa.PrivateKey, error) {
@@ -464,12 +464,12 @@ func (hw *hashicorpWallet) refreshAccounts() error {
 
 // zeroKey zeroes a private key in memory.
 //TODO duplicated code from keystore.go
-func zeroKey(k *ecdsa.PrivateKey) {
-	b := k.D.Bits()
-	for i := range b {
-		b[i] = 0
-	}
-}
+//func zeroKey(k *ecdsa.PrivateKey) {
+//	b := k.D.Bits()
+//	for i := range b {
+//		b[i] = 0
+//	}
+//}
 
 func GenerateAndStore(config WalletConfig) (common.Address, error) {
 	hw, err := NewWallet(config.Client, config.Secrets, &event.Feed{})
