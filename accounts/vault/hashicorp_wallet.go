@@ -1,4 +1,4 @@
-package hashicorp
+package vault
 
 import (
 	"crypto/ecdsa"
@@ -93,13 +93,13 @@ func (hw *hashicorpWallet) URL() accounts.URL {
 	return hw.url
 }
 
-const (
-	walletClosed = "Closed"
-	vaultUninitialised = "Vault uninitialised"
-	vaultSealed = "Vault sealed"
-	healthcheckFailed = "Vault healthcheck failed"
-	walletOpen = "Open, vault initialised and unsealed"
-)
+//const (
+//	walletClosed = "Closed"
+//	vaultUninitialised = "Vault uninitialised"
+//	vaultSealed = "Vault sealed"
+//	healthcheckFailed = "Vault healthcheck failed"
+//	walletOpen = "Open, vault initialised and unsealed"
+//)
 
 func (hw *hashicorpWallet) Status() (string, error) {
 	hw.stateLock.RLock()

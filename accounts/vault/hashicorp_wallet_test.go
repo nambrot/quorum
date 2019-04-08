@@ -1,4 +1,4 @@
-package hashicorp
+package vault
 
 import (
 	"errors"
