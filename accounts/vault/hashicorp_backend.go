@@ -4,6 +4,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
+	"sort"
 	"sync"
 )
 
@@ -13,6 +14,20 @@ type hashicorpBackend struct {
 	updateFeed event.Feed
 	updateScope event.SubscriptionScope
 	hashicorpConfigs []HashicorpWalletConfig
+}
+
+type walletsByUrl []accounts.Wallet
+
+func (w walletsByUrl) Len() int {
+	return len(w)
+}
+
+func (w walletsByUrl) Less(i, j int) bool {
+	return (w[i].URL()).Cmp(w[j].URL()) < 0
+}
+
+func (w walletsByUrl) Swap(i, j int) {
+	w[i], w[j] = w[j], w[i]
 }
 
 func NewHashicorpBackend(hashicorpConfigs []HashicorpWalletConfig) *hashicorpBackend {
@@ -49,6 +64,7 @@ func (hb *hashicorpBackend) createWallets() {
 			hb.updateFeed.Send(e)
 		}
 
+		sort.Sort(walletsByUrl(wallets))
 		hb.wallets = wallets
 	}
 }
