@@ -80,7 +80,7 @@ func (w *vaultWallet) Accounts() []accounts.Account {
 	accts, err := w.vault.getAccounts()
 
 	if err != nil {
-		log.Warn("Unable to get accounts", "err", err)
+		log.Warn("Unable to get accounts", "wallet", w.URL(), "err", err)
 		return nil
 	}
 
@@ -201,44 +201,3 @@ func zeroKey(k *ecdsa.PrivateKey) {
 		b[i] = 0
 	}
 }
-
-//func GenerateAndStore(config WalletConfig) (common.Address, error) {
-//	hw, err := NewWallet(config.Client, config.Secrets, &event.Feed{})
-//
-//	if err != nil {
-//		return common.Address{}, err
-//	}
-//
-//	err = hw.Open("")
-//
-//	if err != nil {
-//		return common.Address{}, err
-//	}
-//
-//	if status, err := hw.Status(); err != nil {
-//		return common.Address{}, err
-//	} else if status != walletOpen {
-//		return common.Address{}, fmt.Errorf("error creating Vault client, %v", status)
-//	}
-//
-//	key, err := generateKey(rand.Reader)
-//	if err != nil {
-//		return common.Address{}, err
-//	}
-//	defer zeroKey(key)
-//
-//	address, err := hw.storeKey(key)
-//	if err != nil {
-//		return common.Address{}, err
-//	}
-//
-//	return address, nil
-//}
-//
-//func generateKey(r io.Reader) (*ecdsa.PrivateKey, error) {
-//	privateKeyECDSA, err := ecdsa.GenerateKey(crypto.S256(), r)
-//	if err != nil {
-//		return nil, err
-//	}
-//	return privateKeyECDSA, nil
-//}

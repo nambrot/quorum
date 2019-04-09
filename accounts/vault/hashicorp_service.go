@@ -173,16 +173,16 @@ func (s *hashicorpService) getAccounts() ([]accounts.Account, error) {
 	var accts []accounts.Account
 
 	for _, secret := range s.secrets {
-		addr, err := s.getAddress(secret)
-
-		if err != nil {
-			return nil, err
-		}
-
 		url, err := s.getAccountUrl(secret)
 
 		if err != nil {
-			return nil, err
+			return nil, errors.WithMessage(err, "error getting account url")
+		}
+
+		addr, err := s.getAddress(secret)
+
+		if err != nil {
+			return nil, errors.WithMessage(err, fmt.Sprintf("error getting address for account %v", url))
 		}
 
 		acctSecret := acctAndSecret{acct: accounts.Account{Address: addr, URL: url}, secret: secret}
@@ -221,17 +221,17 @@ func (s *hashicorpService) getAddress(secret HashicorpSecret) (common.Address, e
 	acct, ok := m[secret.AccountID]
 
 	if !ok {
-		return common.Address{}, errors.WithMessage(err, "no value found in vault with provided AccountID")
+		return common.Address{}, fmt.Errorf("no value found in vault with provided AccountID %v", secret.AccountID)
 	}
 
 	strAcct, ok := acct.(string)
 
 	if !ok {
-		return common.Address{}, errors.WithMessage(err, "AccountID value in vault is not plain string")
+		return common.Address{}, errors.New("AccountID value in vault is not plain string")
 	}
 
 	if !common.IsHexAddress(strAcct) {
-		return common.Address{}, errors.WithMessage(err, "unable to get account from vault")
+		return common.Address{}, errors.New("value in vault is not a valid hex-encoded Ethereum address")
 	}
 
 	return common.HexToAddress(strAcct), nil
@@ -252,50 +252,6 @@ func (s *hashicorpService) getAccountUrl(secret HashicorpSecret) (accounts.URL, 
 	}
 
 	return url, nil
-}
-
-func (s *hashicorpService) getAccount(secret HashicorpSecret) (accounts.Account, error) {
-	path, queryParams, err := secret.toRequestData()
-
-	if err != nil {
-		return accounts.Account{}, errors.WithMessage(err, "unable to get secret URL from data")
-	}
-
-	s.stateLock.RLock()
-	vaultResponse, err := s.client.Logical().ReadWithData(path, queryParams)
-	s.stateLock.RUnlock()
-
-	if err != nil {
-		return accounts.Account{}, errors.WithMessage(err, "unable to retrieve secret from vault")
-	}
-
-	data := vaultResponse.Data["data"]
-
-	m := data.(map[string]interface{})
-	acct, ok := m[secret.AccountID]
-
-	if !ok {
-		return accounts.Account{}, errors.WithMessage(err, "no value found in vault with provided AccountID")
-	}
-
-	strAcct, ok := acct.(string)
-
-	if !ok {
-		return accounts.Account{}, errors.WithMessage(err, "AccountID value in vault is not plain string")
-	}
-
-	if !common.IsHexAddress(strAcct) {
-		return accounts.Account{}, errors.WithMessage(err, "unable to get account from vault")
-	}
-
-	u := fmt.Sprintf("%v/v1/%v?version=%v", s.clientConfig.Url, path, secret.Version)
-	url, err := parseURL(u)
-
-	if err != nil {
-		return accounts.Account{}, errors.WithMessage(err, "unable to create account URL")
-	}
-
-	return accounts.Account{Address: common.HexToAddress(strAcct), URL: url}, nil
 }
 
 func (s *hashicorpService) GetPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error) {
@@ -335,24 +291,23 @@ func (s *hashicorpService) GetPrivateKey(account accounts.Account) (*ecdsa.Priva
 
 	data, ok := vaultResponse.Data["data"]
 	if !ok {
-		return &ecdsa.PrivateKey{}, errors.WithMessage(err, "vault response does not contain 'data' field")
+		return &ecdsa.PrivateKey{}, errors.New("vault response does not contain 'data' field")
 	}
 
 	m := data.(map[string]interface{})
 	k, ok := m[secret.KeyID]
 
 	if !ok {
-		return &ecdsa.PrivateKey{}, errors.WithMessage(err, "no value found in vault with provided KeyID")
+		return &ecdsa.PrivateKey{}, errors.New("no value found in vault with provided KeyID")
 	}
 
 	strK, ok := k.(string)
 
 	if !ok {
-		return &ecdsa.PrivateKey{}, errors.WithMessage(err, "KeyID value in vault is not plain string")
+		return &ecdsa.PrivateKey{}, errors.New("KeyID value in vault is not plain string")
 	}
 
 	key, err := crypto.HexToECDSA(strK)
-
 
 	if err != nil {
 		return &ecdsa.PrivateKey{}, err
