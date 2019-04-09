@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/vault/api"
 	"github.com/pkg/errors"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -21,7 +22,27 @@ type hashicorpService struct {
 	secrets []HashicorpSecret
 	stateLock sync.RWMutex
 	client clientI
-	secretsByAccount map[accounts.Account]HashicorpSecret
+	// The same address may be provided in more than one way (e.g. by specifying v0 and a specific version which happens to be the latest version).  As a result multiple secrets may be defined for the same address
+	acctSecretsByAddress map[common.Address][]acctAndSecret
+}
+
+type acctAndSecret struct {
+	acct accounts.Account
+	secret HashicorpSecret
+}
+
+type byUrl []accounts.Account
+
+func (a byUrl) Len() int {
+	return len(a)
+}
+
+func (a byUrl) Less(i, j int) bool {
+	return (a[i].URL).Cmp(a[j].URL) < 0
+}
+
+func (a byUrl) Swap(i, j int) {
+	a[i], a[j] = a[j], a[i]
 }
 
 func NewHashicorpService(clientConfig HashicorpClientConfig, secrets []HashicorpSecret) VaultService {
@@ -136,7 +157,7 @@ func (s *hashicorpService) Close() error {
 
 	s.client.ClearToken()
 	s.client = nil
-	s.secretsByAccount = nil
+	s.acctSecretsByAddress = nil
 
 	return nil
 }
@@ -148,31 +169,89 @@ func (s *hashicorpService) getAccounts() ([]accounts.Account, error) {
 		return nil, err
 	}
 
-	secretsByAccount := make(map[accounts.Account]HashicorpSecret)
+	acctSecretsByAddress := make(map[common.Address][]acctAndSecret)
+	var accts []accounts.Account
 
 	for _, secret := range s.secrets {
-		acct, err := s.getAccount(secret)
+		addr, err := s.getAddress(secret)
 
 		if err != nil {
 			return nil, err
 		}
 
-		secretsByAccount[acct] = secret
+		url, err := s.getAccountUrl(secret)
+
+		if err != nil {
+			return nil, err
+		}
+
+		acctSecret := acctAndSecret{acct: accounts.Account{Address: addr, URL: url}, secret: secret}
+
+		acctSecretsByAddress[addr] = append(acctSecretsByAddress[addr], acctSecret)
+		accts = append(accts, accounts.Account{Address: addr, URL: url})
 	}
 
 	s.stateLock.Lock()
-	s.secretsByAccount = secretsByAccount
+	s.acctSecretsByAddress = acctSecretsByAddress
 	s.stateLock.Unlock()
-	
-	accts := make([]accounts.Account, len(secretsByAccount))
-	
-	i := 0
-	for a := range secretsByAccount { 
-		accts[i] = a
-		i++
-	}
+
+	sort.Sort(byUrl(accts))
 
 	return accts, nil
+}
+
+func (s *hashicorpService) getAddress(secret HashicorpSecret) (common.Address, error) {
+	path, queryParams, err := secret.toRequestData()
+
+	if err != nil {
+		return common.Address{}, errors.WithMessage(err, "unable to get secret URL from data")
+	}
+
+	s.stateLock.RLock()
+	vaultResponse, err := s.client.Logical().ReadWithData(path, queryParams)
+	s.stateLock.RUnlock()
+
+	if err != nil {
+		return common.Address{}, errors.WithMessage(err, "unable to retrieve secret from vault")
+	}
+
+	data := vaultResponse.Data["data"]
+
+	m := data.(map[string]interface{})
+	acct, ok := m[secret.AccountID]
+
+	if !ok {
+		return common.Address{}, errors.WithMessage(err, "no value found in vault with provided AccountID")
+	}
+
+	strAcct, ok := acct.(string)
+
+	if !ok {
+		return common.Address{}, errors.WithMessage(err, "AccountID value in vault is not plain string")
+	}
+
+	if !common.IsHexAddress(strAcct) {
+		return common.Address{}, errors.WithMessage(err, "unable to get account from vault")
+	}
+
+	return common.HexToAddress(strAcct), nil
+} 
+
+func (s *hashicorpService) getAccountUrl(secret HashicorpSecret) (accounts.URL, error) {
+	path, _, err := secret.toRequestData()
+
+	if err != nil {
+		return accounts.URL{}, errors.WithMessage(err, "unable to get secret URL from data")
+	}
+
+	u := fmt.Sprintf("%v/v1/%v?version=%v", s.clientConfig.Url, path, secret.Version)
+	url, err := parseURL(u)
+
+	if err != nil {
+		return accounts.URL{}, errors.WithMessage(err, "unable to create account URL")
+	}
+
+	return url, nil
 }
 
 func (s *hashicorpService) getAccount(secret HashicorpSecret) (accounts.Account, error) {
@@ -220,9 +299,26 @@ func (s *hashicorpService) getAccount(secret HashicorpSecret) (accounts.Account,
 }
 
 func (s *hashicorpService) GetPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error) {
-	
-	secret := s.secretsByAccount[account]
-	
+	acctAndSecrets, ok := s.acctSecretsByAddress[account.Address]
+
+	if !ok {
+		return &ecdsa.PrivateKey{}, accounts.ErrUnknownAccount
+	}
+
+	// if provided account has empty url then take first acct found for this address, else search for acct read from vault that has the same url
+	var secret HashicorpSecret
+
+	for _, as := range acctAndSecrets {
+		if account.URL == (accounts.URL{}) || account.URL == as.acct.URL {
+			secret = as.secret
+			break
+		}
+	}
+
+	if secret == (HashicorpSecret{}) {
+		return &ecdsa.PrivateKey{}, accounts.ErrUnknownAccount
+	}
+
 	path, queryParams, err := secret.toRequestData()
 
 	if err != nil {
@@ -237,7 +333,10 @@ func (s *hashicorpService) GetPrivateKey(account accounts.Account) (*ecdsa.Priva
 		return &ecdsa.PrivateKey{}, errors.WithMessage(err, "unable to retrieve secret from vault")
 	}
 
-	data := vaultResponse.Data["data"]
+	data, ok := vaultResponse.Data["data"]
+	if !ok {
+		return &ecdsa.PrivateKey{}, errors.WithMessage(err, "vault response does not contain 'data' field")
+	}
 
 	m := data.(map[string]interface{})
 	k, ok := m[secret.KeyID]
