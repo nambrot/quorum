@@ -28,7 +28,7 @@ type VaultService interface {
 	Open() error
 	IsOpen() bool
 	Close() error
-	getAccounts() ([]accounts.Account, error)
+	getAccounts() ([]accounts.Account, []error)
 	GetPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error)
 	Store(key *ecdsa.PrivateKey) (common.Address, error)
 }
@@ -77,11 +77,10 @@ func (w *vaultWallet) Close() error {
 
 // Account implements accounts.Wallet, returning the accounts specified in config that are stored in the vault.  refreshAccounts() retrieves the list of accounts from the vault and so must have been called prior to this method in order to return a non-empty slice
 func (w *vaultWallet) Accounts() []accounts.Account {
-	accts, err := w.vault.getAccounts()
+	accts, errs := w.vault.getAccounts()
 
-	if err != nil {
-		log.Warn("Unable to get accounts", "wallet", w.URL(), "err", err)
-		return nil
+	for _, err := range errs {
+		log.Warn("Error getting account from vault", "wallet", w.URL(), "err", err)
 	}
 
 	w.stateLock.Lock()
@@ -164,21 +163,6 @@ func (w *vaultWallet) SignHashWithPassphrase(account accounts.Account, passphras
 func (w *vaultWallet) SignTxWithPassphrase(account accounts.Account, passphrase string, tx *types.Transaction, chainID *big.Int) (*types.Transaction, error) {
 	return w.SignTx(account, tx, chainID, true)
 }
-
-//type hashicorpError struct {
-//	msg       string
-//	secret    Secret
-//	walletUrl accounts.URL
-//	err       error
-//}
-//
-//func (e hashicorpError) Error() string {
-//	if e.err != nil {
-//		return fmt.Sprintf("%s, %v: wallet %v, secret %v", e.msg, e.err, e.walletUrl, e.secret)
-//	}
-//
-//	return fmt.Sprintf("%s: wallet %v, secret %v", e.msg, e.walletUrl, e.secret)
-//}
 
 // TODO Duplicated code from url.go
 // parseURL converts a user supplied URL into the accounts specific structure.

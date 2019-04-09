@@ -162,27 +162,31 @@ func (s *hashicorpService) Close() error {
 	return nil
 }
 
-func (s *hashicorpService) getAccounts() ([]accounts.Account, error) {
+func (s *hashicorpService) getAccounts() ([]accounts.Account, []error) {
 	if status, err := s.Status(); status == walletClosed {
-		return nil, errors.New("Wallet closed")
+		return nil, []error{errors.New("Wallet closed")}
 	} else if err != nil {
-		return nil, err
+		return nil, []error{err}
 	}
 
 	acctSecretsByAddress := make(map[common.Address][]acctAndSecret)
 	var accts []accounts.Account
 
+	// If a secret is not found in the vault we want to continue checking the other secrets before returning from this func
+	var errs []error
 	for _, secret := range s.secrets {
 		url, err := s.getAccountUrl(secret)
 
 		if err != nil {
-			return nil, errors.WithMessage(err, "error getting account url")
+			errs = append(errs, errors.WithMessage(err, fmt.Sprintf("error getting account url for %+v", secret)))
+			continue
 		}
 
 		addr, err := s.getAddress(secret)
 
 		if err != nil {
-			return nil, errors.WithMessage(err, fmt.Sprintf("error getting address for account %v", url))
+			errs = append(errs, errors.WithMessage(err, fmt.Sprintf("error getting address for account %v", url)))
+			continue
 		}
 
 		acctSecret := acctAndSecret{acct: accounts.Account{Address: addr, URL: url}, secret: secret}
@@ -197,7 +201,7 @@ func (s *hashicorpService) getAccounts() ([]accounts.Account, error) {
 
 	sort.Sort(byUrl(accts))
 
-	return accts, nil
+	return accts, errs
 }
 
 func (s *hashicorpService) getAddress(secret HashicorpSecret) (common.Address, error) {
