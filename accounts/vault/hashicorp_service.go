@@ -72,7 +72,7 @@ const (
 	walletOpen = "Open, vault initialised and unsealed"
 )
 
-func (s *hashicorpService) Status() (string, error) {
+func (s *hashicorpService) status() (string, error) {
 	if s.client == nil {
 		return walletClosed, nil
 	}
@@ -94,14 +94,14 @@ func (s *hashicorpService) Status() (string, error) {
 	return walletOpen, nil
 }
 
-func (s *hashicorpService) IsOpen() bool {
+func (s *hashicorpService) isOpen() bool {
 	s.stateLock.RLock()
 	defer s.stateLock.RUnlock()
 
 	return s.client != nil
 }
 
-func (s *hashicorpService) Open() error {
+func (s *hashicorpService) open() error {
 	s.stateLock.Lock() // State lock is enough since there's no connection yet at this point
 	defer s.stateLock.Unlock()
 
@@ -147,8 +147,8 @@ func (s *hashicorpService) Open() error {
 	return nil
 }
 
-func (s *hashicorpService) Close() error {
-	if !s.IsOpen() {
+func (s *hashicorpService) close() error {
+	if !s.isOpen() {
 		return nil
 	}
 
@@ -163,7 +163,7 @@ func (s *hashicorpService) Close() error {
 }
 
 func (s *hashicorpService) getAccounts() ([]accounts.Account, []error) {
-	if status, err := s.Status(); status == walletClosed {
+	if status, err := s.status(); status == walletClosed {
 		return nil, []error{errors.New("Wallet closed")}
 	} else if err != nil {
 		return nil, []error{err}
@@ -258,16 +258,15 @@ func (s *hashicorpService) getAccountUrl(secret HashicorpSecret) (accounts.URL, 
 	return url, nil
 }
 
-func (s *hashicorpService) GetPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error) {
+func (s *hashicorpService) getPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error) {
 	acctAndSecrets, ok := s.acctSecretsByAddress[account.Address]
 
 	if !ok {
 		return &ecdsa.PrivateKey{}, accounts.ErrUnknownAccount
 	}
 
-	// if provided account has empty url then take first acct found for this address, else search for acct read from vault that has the same url
+	// if provided account has empty url then take first acct found for this address, else search for acct from vault that has the same url
 	var secret HashicorpSecret
-
 	for _, as := range acctAndSecrets {
 		if account.URL == (accounts.URL{}) || account.URL == as.acct.URL {
 			secret = as.secret
@@ -302,7 +301,7 @@ func (s *hashicorpService) GetPrivateKey(account accounts.Account) (*ecdsa.Priva
 	k, ok := m[secret.KeyID]
 
 	if !ok {
-		return &ecdsa.PrivateKey{}, errors.New("no value found in vault with provided KeyID")
+		return &ecdsa.PrivateKey{}, fmt.Errorf("no value found in vault with provided KeyID %v", secret.KeyID)
 	}
 
 	strK, ok := k.(string)
@@ -320,7 +319,7 @@ func (s *hashicorpService) GetPrivateKey(account accounts.Account) (*ecdsa.Priva
 	return key, nil
 }
 
-func (s *hashicorpService) Store(key *ecdsa.PrivateKey) (common.Address, error) {
+func (s *hashicorpService) store(key *ecdsa.PrivateKey) (common.Address, error) {
 	address := crypto.PubkeyToAddress(key.PublicKey)
 	addrHex := address.Hex()
 

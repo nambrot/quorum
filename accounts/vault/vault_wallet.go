@@ -24,13 +24,13 @@ type vaultWallet struct {
 }
 
 type VaultService interface {
-	Status() (string, error)
-	Open() error
-	IsOpen() bool
-	Close() error
+	status() (string, error)
+	open() error
+	isOpen() bool
+	close() error
 	getAccounts() ([]accounts.Account, []error)
-	GetPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error)
-	Store(key *ecdsa.PrivateKey) (common.Address, error)
+	getPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error)
+	store(key *ecdsa.PrivateKey) (common.Address, error)
 }
 
 func (w *vaultWallet) URL() accounts.URL {
@@ -41,7 +41,7 @@ func (w *vaultWallet) Status() (string, error) {
 	w.stateLock.RLock()
 	defer w.stateLock.RUnlock()
 
-	return w.vault.Status()
+	return w.vault.status()
 }
 
 // Open implements accounts.Wallet, creating an authenticated Client and making it accessible to the wallet to enable vault operations.
@@ -50,11 +50,11 @@ func (w *vaultWallet) Status() (string, error) {
 //
 // The passphrase arg is not used and this method does not retrieve any secrets from the vault.
 func (w *vaultWallet) Open(passphrase string) error {
-	if w.vault.IsOpen() {
+	if w.vault.isOpen() {
 		return accounts.ErrWalletAlreadyOpen
 	}
 
-	if err := w.vault.Open(); err != nil {
+	if err := w.vault.open(); err != nil {
 		return err
 	}
 
@@ -72,7 +72,7 @@ func (w *vaultWallet) Close() error {
 
 	w.accounts = nil
 
-	return w.vault.Close()
+	return w.vault.close()
 }
 
 // Account implements accounts.Wallet, returning the accounts specified in config that are stored in the vault.  refreshAccounts() retrieves the list of accounts from the vault and so must have been called prior to this method in order to return a non-empty slice
@@ -126,7 +126,7 @@ func (w *vaultWallet) SignHash(account accounts.Account, hash []byte) ([]byte, e
 	w.stateLock.RLock()
 	defer w.stateLock.RUnlock()
 
-	key, err := w.vault.GetPrivateKey(account)
+	key, err := w.vault.getPrivateKey(account)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +143,7 @@ func (w *vaultWallet) SignTx(account accounts.Account, tx *types.Transaction, ch
 	w.stateLock.RLock()
 	defer w.stateLock.RUnlock()
 
-	key, err := w.vault.GetPrivateKey(account)
+	key, err := w.vault.getPrivateKey(account)
 	if err != nil {
 		return nil, err
 	}

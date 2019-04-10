@@ -8,6 +8,7 @@ import (
 	"sync"
 )
 
+// hashicorpBackend is an accounts.Backend that handles all Hashicorp Vault wallets
 type hashicorpBackend struct {
 	stateLock sync.RWMutex
 	wallets []accounts.Wallet // A vault wallet contains all account keys stored in that particular vault and accessible with a particular auth token
@@ -16,6 +17,7 @@ type hashicorpBackend struct {
 	hashicorpConfigs []HashicorpWalletConfig
 }
 
+// walletsByUrl implements the sort interface to enable the sorting of a slice of wallets by their urls
 type walletsByUrl []accounts.Wallet
 
 func (w walletsByUrl) Len() int {
@@ -30,13 +32,17 @@ func (w walletsByUrl) Swap(i, j int) {
 	w[i], w[j] = w[j], w[i]
 }
 
-func NewHashicorpBackend(hashicorpConfigs []HashicorpWalletConfig) *hashicorpBackend {
-	hb := &hashicorpBackend{hashicorpConfigs: hashicorpConfigs}
+// NewHashicorpBackend is the hashicorpBackend constructor and initialises the new backend by creating a wallet for each the provided walletConfigs.
+// The wallets are not opened and no secrets are retrieved from the vault.
+func NewHashicorpBackend(walletConfigs []HashicorpWalletConfig) *hashicorpBackend {
+	hb := &hashicorpBackend{hashicorpConfigs: walletConfigs}
 	hb.createWallets()
 
 	return hb
 }
 
+// createWallets creates wallets from the backend's wallet configs and updates the backend's wallets field with the result.
+// The wallets are sorted alphabetically by their url.
 func (hb *hashicorpBackend) createWallets() {
 	hb.stateLock.Lock()
 	defer hb.stateLock.Unlock()
@@ -44,13 +50,12 @@ func (hb *hashicorpBackend) createWallets() {
 	var wallets []accounts.Wallet
 	var events []accounts.WalletEvent
 
-	// The wallets for the keystore and hub backends can change frequently (e.g. files created/deleted in datadir, or USB devices connected/disconnected).  The Vault wallets have to be defined as part of the start up config.  As a result we only need to refresh wallets once, on startup - if the vault backend already has wallets then we know the accounts have been retrieved from the vaults on startup so we do not need to check again
+	// The wallets for the keystore and hub backends can change frequently (e.g. files created/deleted in datadir, or USB devices connected/disconnected).  The Vault wallet configs can only be provided at startup - if the vault backend already has wallets then they do not need to be created again.
 	if len(hb.wallets) == 0 {
 		for _, hc := range hb.hashicorpConfigs {
 			w, err := NewHashicorpVaultWallet(hc, &hb.updateFeed)
-			//TODO review how to handle and add contextual info to msgs
 			if err != nil {
-				log.Warn("Unable to create Hashicorp wallet", err)
+				log.Warn("Unable to create Hashicorp wallet", "err", err)
 				return
 			}
 
@@ -99,32 +104,6 @@ func (hb *hashicorpBackend) Wallets() []accounts.Wallet {
 
 	return cpy
 }
-
-//func (hb *hashicorpBackend) refreshWallets() {
-//	// Check which wallets have been added/dropped and raise corresponding events
-//	// Update hb.wallets with refreshed wallets
-//	hb.stateLock.Lock()
-//	defer hb.stateLock.Unlock()
-//
-//	//TODO Wallets should be created before being refreshed
-//	if len(hb.wallets) == 0 {
-//		return
-//	}
-//
-//	for _, w := range hb.wallets {
-//		hw, ok := w.(*hashicorpWallet)
-//
-//		if !ok {
-//			log.Warn("Hashicorp backend contains Wallet of incompatible type %T", w) //TODO does log work in same way as Printf?
-//			return
-//		}
-//
-//		if err := hw.refreshAccounts(); err != nil {
-//			log.Warn("Unable to refresh accounts", "err", err.Error())
-//			return
-//		}
-//	}
-//}
 
 func (hb *hashicorpBackend) Subscribe(sink chan<- accounts.WalletEvent) event.Subscription {
 	// We need the mutex to reliably start/stop the update loop
