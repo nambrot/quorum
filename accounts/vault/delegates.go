@@ -31,21 +31,21 @@ func (cd clientDelegate) Sys() sysI {
 	return cd.Client.Sys()
 }
 
-type clientFactory interface {
-	create() (clientI, error)
-}
-
-type defaultClientFactory struct {
-
-}
-
-func (defaultClientFactory) create() (clientI, error) {
-	conf := api.DefaultConfig()
-	client, err := api.NewClient(conf)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return clientDelegate{client}, nil
-}
+//type clientFactory interface {
+//	create() (clientI, error)
+//}
+//
+//type defaultClientFactory struct {
+//
+//}
+//
+//func (defaultClientFactory) create() (clientI, error) {
+//	conf := api.DefaultConfig()
+//	client, err := api.NewClient(conf)
+//
+//	if err != nil {
+//		return nil, err
+//	}
+//
+//	return clientDelegate{client}, nil
+//}
