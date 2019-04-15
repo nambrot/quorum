@@ -48,7 +48,6 @@ func (hb *hashicorpBackend) createWallets() {
 	defer hb.stateLock.Unlock()
 
 	var wallets []accounts.Wallet
-	var events []accounts.WalletEvent
 
 	// The wallets for the keystore and hub backends can change frequently (e.g. files created/deleted in datadir, or USB devices connected/disconnected).  The Vault wallet configs can only be provided at startup - if the vault backend already has wallets then they do not need to be created again.
 	if len(hb.wallets) == 0 {
@@ -59,14 +58,9 @@ func (hb *hashicorpBackend) createWallets() {
 				return
 			}
 
-			events = append(events, accounts.WalletEvent{w, accounts.WalletArrived})
 			wallets = append(wallets, w)
 
 			//TODO create goroutine to periodically check vault for changes
-		}
-
-		for _, e := range events {
-			hb.updateFeed.Send(e)
 		}
 
 		sort.Sort(walletsByUrl(wallets))
