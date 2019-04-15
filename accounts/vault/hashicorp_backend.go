@@ -1,9 +1,11 @@
 package vault
 
 import (
+	"fmt"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/pkg/errors"
 	"sort"
 	"sync"
 )
@@ -36,26 +38,32 @@ func (w walletsByUrl) Swap(i, j int) {
 // The wallets are not opened and no secrets are retrieved from the vault.
 func NewHashicorpBackend(walletConfigs []HashicorpWalletConfig) *hashicorpBackend {
 	hb := &hashicorpBackend{hashicorpConfigs: walletConfigs}
-	hb.createWallets()
+	errs := hb.createWallets()
+
+	for err := range errs {
+		log.Warn("unable to create Hashicorp wallet", "err", err)
+	}
 
 	return hb
 }
 
 // createWallets creates wallets from the backend's wallet configs and updates the backend's wallets field with the result.
 // The wallets are sorted alphabetically by their url.
-func (hb *hashicorpBackend) createWallets() {
+func (hb *hashicorpBackend) createWallets() []error {
 	hb.stateLock.Lock()
 	defer hb.stateLock.Unlock()
 
+	var errs []error
 	var wallets []accounts.Wallet
 
 	// The wallets for the keystore and hub backends can change frequently (e.g. files created/deleted in datadir, or USB devices connected/disconnected).  The Vault wallet configs can only be provided at startup - if the vault backend already has wallets then they do not need to be created again.
+	// If there is an error creating the wallet for a particular config, the error is stored and the other wallets are attempted to be created.  All errors are then returned.
 	if len(hb.wallets) == 0 {
 		for _, hc := range hb.hashicorpConfigs {
 			w, err := NewHashicorpVaultWallet(hc, &hb.updateFeed)
 			if err != nil {
-				log.Warn("Unable to create Hashicorp wallet", "err", err)
-				return
+				errs = append(errs, errors.WithMessage(err, fmt.Sprintf("For Hashicorp client config with url %v", hc.Client.Url)))
+				continue
 			}
 
 			wallets = append(wallets, w)
@@ -66,6 +74,8 @@ func (hb *hashicorpBackend) createWallets() {
 		sort.Sort(walletsByUrl(wallets))
 		hb.wallets = wallets
 	}
+
+	return errs
 }
 
 func (hb *hashicorpBackend) Wallets() []accounts.Wallet {
