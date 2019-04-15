@@ -16,11 +16,11 @@ import (
 )
 
 type vaultWallet struct {
-	stateLock         sync.RWMutex  // Protects read and write access to the wallet struct fields
-	vault             VaultService
+	vault             VaultService // vault can only be written to in constructor, therefore do not need mutex lock to access.  The VaultService impl is expected to contain a mutex and lock/unlock as required.
 	url               accounts.URL
-	accounts          []accounts.Account
 	updateFeed        *event.Feed
+	stateLock         sync.RWMutex  // Protects read and write access to the wallet struct fields
+	accounts          []accounts.Account
 }
 
 type VaultService interface {
@@ -33,14 +33,29 @@ type VaultService interface {
 	store(key *ecdsa.PrivateKey) (common.Address, error)
 }
 
+func NewHashicorpVaultWallet(config HashicorpWalletConfig, updateFeed *event.Feed) (*vaultWallet, error) {
+	url, err := parseURL(config.Client.Url)
+
+	if err != nil {
+		return &vaultWallet{}, err
+	}
+
+	s := NewHashicorpService(config.Client, config.Secrets)
+
+	w := &vaultWallet{
+		vault: s,
+		url: url,
+		updateFeed: updateFeed,
+	}
+
+	return w, nil
+}
+
 func (w *vaultWallet) URL() accounts.URL {
 	return w.url
 }
 
 func (w *vaultWallet) Status() (string, error) {
-	w.stateLock.RLock()
-	defer w.stateLock.RUnlock()
-
 	return w.vault.status()
 }
 
@@ -58,8 +73,8 @@ func (w *vaultWallet) Open(passphrase string) error {
 		return err
 	}
 
-	w.updateFeed.Send(
-		accounts.WalletEvent{w, accounts.WalletOpened},
+	go w.updateFeed.Send(
+		accounts.WalletEvent{Wallet: w, Kind: accounts.WalletOpened},
 	)
 
 	return nil
@@ -68,9 +83,8 @@ func (w *vaultWallet) Open(passphrase string) error {
 // Close implements accounts.Wallet, clearing the state of the wallet and removing the vault Client so vault operations can no longer be carried out.
 func (w *vaultWallet) Close() error {
 	w.stateLock.Lock()
-	defer w.stateLock.Unlock()
-
 	w.accounts = nil
+	w.stateLock.Unlock()
 
 	return w.vault.close()
 }
@@ -123,9 +137,6 @@ func (w *vaultWallet) SignHash(account accounts.Account, hash []byte) ([]byte, e
 		return nil, accounts.ErrUnknownAccount
 	}
 
-	w.stateLock.RLock()
-	defer w.stateLock.RUnlock()
-
 	key, err := w.vault.getPrivateKey(account)
 	if err != nil {
 		return nil, err
@@ -139,9 +150,6 @@ func (w *vaultWallet) SignTx(account accounts.Account, tx *types.Transaction, ch
 	if !w.Contains(account) {
 		return nil, accounts.ErrUnknownAccount
 	}
-
-	w.stateLock.RLock()
-	defer w.stateLock.RUnlock()
 
 	key, err := w.vault.getPrivateKey(account)
 	if err != nil {

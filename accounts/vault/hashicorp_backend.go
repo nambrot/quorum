@@ -74,24 +74,6 @@ func (hb *hashicorpBackend) createWallets() {
 	}
 }
 
-func NewHashicorpVaultWallet(config HashicorpWalletConfig, updateFeed *event.Feed) (*vaultWallet, error) {
-	url, err := parseURL(config.Client.Url)
-
-	if err != nil {
-		return &vaultWallet{}, err
-	}
-
-	s := NewHashicorpService(config.Client, config.Secrets)
-
-	w := &vaultWallet{
-		vault: s,
-		url: url,
-		updateFeed: updateFeed,
-	}
-
-	return w, nil
-}
-
 func (hb *hashicorpBackend) Wallets() []accounts.Wallet {
 	// check connection to vault is still up before returning wallet
 	// update list of accounts in wallets to cover the instances where secrets have been updated/deleted

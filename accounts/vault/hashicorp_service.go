@@ -18,12 +18,11 @@ import (
 
 type hashicorpService struct {
 	clientFactory func() (clientI, error)
-	clientConfig HashicorpClientConfig
 	secrets []HashicorpSecret
 	stateLock sync.RWMutex
+	clientConfig HashicorpClientConfig
 	client clientI
-	// The same address may be provided in more than one way (e.g. by specifying v0 and a specific version which happens to be the latest version).  As a result multiple secrets may be defined for the same address
-	acctSecretsByAddress map[common.Address][]acctAndSecret
+	acctSecretsByAddress map[common.Address][]acctAndSecret // The same address may be provided in more than one way (e.g. by specifying v0 and a specific version which happens to be the latest version).  As a result multiple secrets may be defined for the same address
 }
 
 type acctAndSecret struct {
@@ -31,17 +30,18 @@ type acctAndSecret struct {
 	secret HashicorpSecret
 }
 
-type byUrl []accounts.Account
+//TODO duplicated code from account_cache.go
+type accountsByUrl []accounts.Account
 
-func (a byUrl) Len() int {
+func (a accountsByUrl) Len() int {
 	return len(a)
 }
 
-func (a byUrl) Less(i, j int) bool {
+func (a accountsByUrl) Less(i, j int) bool {
 	return (a[i].URL).Cmp(a[j].URL) < 0
 }
 
-func (a byUrl) Swap(i, j int) {
+func (a accountsByUrl) Swap(i, j int) {
 	a[i], a[j] = a[j], a[i]
 }
 
@@ -73,6 +73,9 @@ const (
 )
 
 func (s *hashicorpService) status() (string, error) {
+	s.stateLock.RLock()
+	defer s.stateLock.RUnlock()
+
 	if s.client == nil {
 		return walletClosed, nil
 	}
@@ -102,21 +105,22 @@ func (s *hashicorpService) isOpen() bool {
 }
 
 func (s *hashicorpService) open() error {
-	s.stateLock.Lock() // State lock is enough since there's no connection yet at this point
+	s.stateLock.Lock()
 	defer s.stateLock.Unlock()
 
 	// If the environment variable `VAULT_TOKEN` is present, the token will be automatically added to the created client
 
-	var err error
-	s.client, err = s.clientFactory()
+	client, err := s.clientFactory()
 
 	if err != nil {
 		return err
 	}
 
-	if err := s.client.SetAddress(s.clientConfig.Url); err != nil {
+	if err := client.SetAddress(s.clientConfig.Url); err != nil {
 		return err
 	}
+
+	s.client = client
 
 	// If the roleID and secretID environment variables are present, these will be used to authenticate the client and replace the default VAULT_TOKEN value
 	// As using Approle is preferred over using the standalone token, an error will be returned if only one of these environment variables is set
@@ -174,6 +178,8 @@ func (s *hashicorpService) getAccounts() ([]accounts.Account, []error) {
 
 	// If a secret is not found in the vault we want to continue checking the other secrets before returning from this func
 	var errs []error
+
+	s.stateLock.RLock()
 	for _, secret := range s.secrets {
 		url, err := s.getAccountUrl(secret)
 
@@ -194,12 +200,13 @@ func (s *hashicorpService) getAccounts() ([]accounts.Account, []error) {
 		acctSecretsByAddress[addr] = append(acctSecretsByAddress[addr], acctSecret)
 		accts = append(accts, accounts.Account{Address: addr, URL: url})
 	}
+	s.stateLock.RUnlock()
 
 	s.stateLock.Lock()
 	s.acctSecretsByAddress = acctSecretsByAddress
 	s.stateLock.Unlock()
 
-	sort.Sort(byUrl(accts))
+	sort.Sort(accountsByUrl(accts))
 
 	return accts, errs
 }
@@ -248,6 +255,9 @@ func (s *hashicorpService) getAccountUrl(secret HashicorpSecret) (accounts.URL, 
 		return accounts.URL{}, errors.WithMessage(err, "unable to get secret URL from data")
 	}
 
+	s.stateLock.RLock()
+	defer s.stateLock.RUnlock()
+
 	u := fmt.Sprintf("%v/v1/%v?version=%v", s.clientConfig.Url, path, secret.Version)
 	url, err := parseURL(u)
 
@@ -259,6 +269,9 @@ func (s *hashicorpService) getAccountUrl(secret HashicorpSecret) (accounts.URL, 
 }
 
 func (s *hashicorpService) getPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error) {
+	s.stateLock.RLock()
+	defer s.stateLock.RUnlock()
+
 	acctAndSecrets, ok := s.acctSecretsByAddress[account.Address]
 
 	if !ok {
@@ -284,9 +297,7 @@ func (s *hashicorpService) getPrivateKey(account accounts.Account) (*ecdsa.Priva
 		return &ecdsa.PrivateKey{}, errors.WithMessage(err, "unable to get secret URL from data")
 	}
 
-	s.stateLock.RLock()
 	vaultResponse, err := s.client.Logical().ReadWithData(path, queryParams)
-	s.stateLock.RUnlock()
 
 	if err != nil {
 		return &ecdsa.PrivateKey{}, errors.WithMessage(err, "unable to retrieve secret from vault")
@@ -330,7 +341,9 @@ func (s *hashicorpService) store(key *ecdsa.PrivateKey) (common.Address, error) 
 	keyBytes := crypto.FromECDSA(key)
 	keyHex := hex.EncodeToString(keyBytes)
 
-	secret := s .secrets[0]
+	s.stateLock.RLock()
+	defer s.stateLock.RUnlock()
+	secret := s.secrets[0]
 
 	path := fmt.Sprintf("%s/data/%s", secret.SecretEngine, secret.Name)
 
