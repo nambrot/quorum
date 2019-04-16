@@ -60,3 +60,84 @@ func createWalletConfigs() []HashicorpWalletConfig {
 		{ Client: c[1], Secrets: s[2:3] },
 	}
 }
+
+func TestConstructorErrorCreatingWalletDoesNotPreventCreationOfOtherWallets(t *testing.T) {
+	v := 2
+	i := 2
+	c := createValidAndInvalidWalletConfigs(v, i)
+	b := NewHashicorpBackend(c)
+
+	w := b.wallets
+
+	if len(w) != v {
+		t.Errorf("incorrect number of wallets created, want %v, got %v", v, len(w))
+	}
+}
+
+func createValidAndInvalidWalletConfigs(valid, invalid int) []HashicorpWalletConfig {
+	var c []HashicorpWalletConfig
+
+	for i := 0; i < valid; i++ {
+		c = append(c,
+			HashicorpWalletConfig{
+				Client: HashicorpClientConfig{Url: "http://client"},
+			})
+	}
+
+	for i := 0; i < invalid; i++ {
+		c = append(c,
+			HashicorpWalletConfig{
+				Client: HashicorpClientConfig{Url: "noscheme"},
+		})
+	}
+
+	return c
+}
+
+func TestWalletsReturnsCopy(t *testing.T) {
+	w1 := &vaultWallet{url: accounts.URL{"http", "vault1"}}
+	w2 := &vaultWallet{url: accounts.URL{"http", "vault2"}}
+
+	wallets := []accounts.Wallet{
+		w1, w2,
+	}
+
+	b := hashicorpBackend{wallets: wallets}
+
+	result := b.Wallets()
+
+	if !reflect.DeepEqual(result, wallets) {
+		t.Errorf("incorrect wallets returned from backend\nwant: %v\ngot : %v", wallets, result)
+	}
+
+	w3 := &vaultWallet{url: accounts.URL{"http", "vault3"}}
+
+	result[0] = w3
+
+	if reflect.DeepEqual(b.wallets, result) {
+		t.Errorf("changing the Wallets() return value should not alter the backend's wallets property\nwant: %v\ngot : %v", result, b.wallets)
+	}
+}
+
+func TestSubscribe(t *testing.T) {
+	b := hashicorpBackend{}
+	c1 := make(chan accounts.WalletEvent)
+	c2 := make(chan accounts.WalletEvent)
+
+	b.Subscribe(c1)
+	b.Subscribe(c2)
+
+	w := &vaultWallet{}
+	event := accounts.WalletEvent{Wallet: w, Kind: accounts.WalletArrived}
+	go b.updateFeed.Send(event)
+
+	fromSub := <-c1
+	if !reflect.DeepEqual(fromSub, event) {
+		t.Errorf("value from channel does not equal sent event\nwant: %v\ngot : %v", event, fromSub)
+	}
+
+	fromSub = <-c2
+	if !reflect.DeepEqual(fromSub, event) {
+		t.Errorf("value from channel does not equal sent event\nwant: %v\ngot : %v", event, fromSub)
+	}
+}
