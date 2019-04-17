@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-
-
 func TestWalletsByUrl(t *testing.T) {
 	w1 := &vaultWallet{url: accounts.URL{Scheme: "http", Path: "localhost:8080"}}
 	w2 := &vaultWallet{url: accounts.URL{Scheme: "http", Path: "localhost:9080"}}

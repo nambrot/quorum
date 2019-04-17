@@ -37,7 +37,6 @@ func (s HashicorpSecret) toRequestData() (string, map[string][]string, error) {
 
 	queryParams := make(map[string][]string)
 	if s.Version < 0 {
-		//TODO custom error type?
 		return "", nil, fmt.Errorf("Hashicorp Vault secret version must be integer >= 0")
 	}
 	queryParams["version"] = []string{strconv.Itoa(s.Version)}

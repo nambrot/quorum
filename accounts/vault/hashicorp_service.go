@@ -106,6 +106,12 @@ func (s *hashicorpService) isOpen() bool {
 	return s.client != nil
 }
 
+var (
+	cannotAuthenticateErr = fmt.Errorf("Unable to authenticate client.  Set the %v and %v env vars to use AppRole authentication.  Set %v env var to use Token authentication", envvars.VaultRoleId, envvars.VaultSecretId, api.EnvVaultToken)
+
+	approleAuthenticationErr = fmt.Errorf("both %q and %q environment variables must be set to use Approle authentication", envvars.VaultRoleId, envvars.VaultSecretId)
+)
+
 func (s *hashicorpService) open() error {
 	s.stateLock.Lock()
 	defer s.stateLock.Unlock()
@@ -128,9 +134,16 @@ func (s *hashicorpService) open() error {
 	// As using Approle is preferred over using the standalone token, an error will be returned if only one of these environment variables is set
 	roleId, rIdOk := os.LookupEnv(envvars.VaultRoleId)
 	secretId, sIdOk := os.LookupEnv(envvars.VaultSecretId)
+	t, tOk := os.LookupEnv(api.EnvVaultToken)
+
+	fmt.Println(t)
+
+	if !(rIdOk || sIdOk || tOk) {
+		return cannotAuthenticateErr
+	}
 
 	if rIdOk != sIdOk {
-		return fmt.Errorf("both %q and %q environment variables must be set to use Approle authentication", envvars.VaultRoleId, envvars.VaultSecretId)
+		return approleAuthenticationErr
 	}
 
 	if rIdOk && sIdOk {
@@ -213,6 +226,26 @@ func (s *hashicorpService) getAccounts() ([]accounts.Account, []error) {
 	return accts, errs
 }
 
+func (s *hashicorpService) getAccountUrl(secret HashicorpSecret) (accounts.URL, error) {
+	path, _, err := secret.toRequestData()
+
+	if err != nil {
+		return accounts.URL{}, errors.WithMessage(err, "unable to get secret URL from data")
+	}
+
+	s.stateLock.RLock()
+	defer s.stateLock.RUnlock()
+
+	u := fmt.Sprintf("%v/v1/%v?version=%v", s.clientConfig.Url, path, secret.Version)
+	url, err := parseURL(u)
+
+	if err != nil {
+		return accounts.URL{}, errors.WithMessage(err, "unable to create account URL")
+	}
+
+	return url, nil
+}
+
 func (s *hashicorpService) getAddress(secret HashicorpSecret) (common.Address, error) {
 	path, queryParams, err := secret.toRequestData()
 
@@ -249,26 +282,6 @@ func (s *hashicorpService) getAddress(secret HashicorpSecret) (common.Address, e
 
 	return common.HexToAddress(strAcct), nil
 } 
-
-func (s *hashicorpService) getAccountUrl(secret HashicorpSecret) (accounts.URL, error) {
-	path, _, err := secret.toRequestData()
-
-	if err != nil {
-		return accounts.URL{}, errors.WithMessage(err, "unable to get secret URL from data")
-	}
-
-	s.stateLock.RLock()
-	defer s.stateLock.RUnlock()
-
-	u := fmt.Sprintf("%v/v1/%v?version=%v", s.clientConfig.Url, path, secret.Version)
-	url, err := parseURL(u)
-
-	if err != nil {
-		return accounts.URL{}, errors.WithMessage(err, "unable to create account URL")
-	}
-
-	return url, nil
-}
 
 func (s *hashicorpService) getPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error) {
 	s.stateLock.RLock()
