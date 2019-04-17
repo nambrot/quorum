@@ -114,8 +114,8 @@ func TestWalletsReturnsCopy(t *testing.T) {
 
 	result[0] = w3
 
-	if reflect.DeepEqual(b.wallets, result) {
-		t.Errorf("changing the Wallets() return value should not alter the backend's wallets property\nwant: %v\ngot : %v", result, b.wallets)
+	if !reflect.DeepEqual(b.wallets, wallets) {
+		t.Errorf("changing the Wallets() return value should not alter the backend's wallets property\nwant: %v\ngot : %v", wallets, b.wallets)
 	}
 }
 

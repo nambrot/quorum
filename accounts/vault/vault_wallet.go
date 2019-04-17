@@ -157,7 +157,6 @@ func (w *vaultWallet) SignTx(account accounts.Account, tx *types.Transaction, ch
 	}
 	defer zeroKey(key)
 
-	// Depending on the presence of the chain ID, sign with EIP155 or homestead
 	if chainID != nil && !tx.IsPrivate() {
 		return types.SignTx(tx, types.NewEIP155Signer(chainID), key)
 	}
