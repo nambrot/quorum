@@ -21,7 +21,6 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"github.com/ethereum/go-ethereum/accounts/vault"
-	"github.com/ethereum/go-ethereum/accounts/vault/envvars"
 	"io/ioutil"
 	"math/big"
 	"os"
@@ -139,7 +138,7 @@ var (
 	}
 	HashicorpApproleFlag = cli.StringFlag{
 		Name:  "hashicorp.approle",
-		Usage: fmt.Sprintf("Vault path for an enabled Approle auth method (requires %v and %v env vars to be set)", envvars.VaultRoleId, envvars.VaultSecretId),
+		Usage: fmt.Sprintf("Vault path for an enabled Approle auth method (requires %v and %v env vars to be set)", vault.VaultRoleId, vault.VaultSecretId),
 		Value: "approle",
 	}
 	HashicorpClientCertFlag = cli.StringFlag{

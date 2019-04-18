@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/ethereum/go-ethereum/accounts"
-	"github.com/ethereum/go-ethereum/accounts/vault/envvars"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/hashicorp/vault/api"
@@ -36,6 +35,35 @@ func defaultClientDelegateFactory() (clientDelegate, error) {
 	}
 
 	return defaultClientDelegate{client}, nil
+}
+
+type clientDelegate interface {
+	Logical() logicalDelegate
+	Sys() sysDelegate
+	SetAddress(addr string) error
+	SetToken(v string)
+	ClearToken()
+}
+
+type logicalDelegate interface{
+	ReadWithData(path string, data map[string][]string) (*api.Secret, error)
+	Write(path string, data map[string]interface{}) (*api.Secret, error)
+}
+
+type sysDelegate interface{
+	Health() (*api.HealthResponse, error)
+}
+
+type defaultClientDelegate struct {
+	*api.Client
+}
+
+func (cd defaultClientDelegate) Logical() logicalDelegate {
+	return cd.Client.Logical()
+}
+
+func (cd defaultClientDelegate) Sys() sysDelegate {
+	return cd.Client.Sys()
 }
 
 type acctAndSecret struct {
@@ -106,10 +134,15 @@ func (s *hashicorpService) IsOpen() bool {
 	return s.client != nil
 }
 
-var (
-	cannotAuthenticateErr = fmt.Errorf("Unable to authenticate client.  Set the %v and %v env vars to use AppRole authentication.  Set %v env var to use Token authentication", envvars.VaultRoleId, envvars.VaultSecretId, api.EnvVaultToken)
+const (
+	VaultRoleId   = "VAULT_ROLE_ID"
+	VaultSecretId = "VAULT_SECRET_ID"
+)
 
-	approleAuthenticationErr = fmt.Errorf("both %q and %q environment variables must be set to use Approle authentication", envvars.VaultRoleId, envvars.VaultSecretId)
+var (
+	cannotAuthenticateErr = fmt.Errorf("Unable to authenticate client.  Set the %v and %v env vars to use AppRole authentication.  Set %v env var to use Token authentication", VaultRoleId, VaultSecretId, api.EnvVaultToken)
+
+	approleAuthenticationErr = fmt.Errorf("both %q and %q environment variables must be set to use Approle authentication", VaultRoleId, VaultSecretId)
 )
 
 func (s *hashicorpService) Open() error {
@@ -132,8 +165,8 @@ func (s *hashicorpService) Open() error {
 
 	// If the roleID and secretID environment variables are present, these will be used to authenticate the client and replace the default VAULT_TOKEN value
 	// As using Approle is preferred over using the standalone token, an error will be returned if only one of these environment variables is set
-	roleId, rIdOk := os.LookupEnv(envvars.VaultRoleId)
-	secretId, sIdOk := os.LookupEnv(envvars.VaultSecretId)
+	roleId, rIdOk := os.LookupEnv(VaultRoleId)
+	secretId, sIdOk := os.LookupEnv(VaultSecretId)
 	t, tOk := os.LookupEnv(api.EnvVaultToken)
 
 	fmt.Println(t)

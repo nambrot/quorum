@@ -4,7 +4,6 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"github.com/ethereum/go-ethereum/accounts"
-	"github.com/ethereum/go-ethereum/accounts/vault/envvars"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/hashicorp/vault/api"
@@ -281,7 +280,7 @@ func TestOpenWithNoEnvVarsSetReturnsError(t *testing.T) {
 func TestOpenOnlyRoleIdEnvVarSetReturnsError(t *testing.T) {
 	unsetEnvVars(t)
 	defer unsetEnvVars(t)
-	err := os.Setenv(envvars.VaultRoleId, "some value")
+	err := os.Setenv(VaultRoleId, "some value")
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -311,7 +310,7 @@ func TestOpenOnlyRoleIdEnvVarSetReturnsError(t *testing.T) {
 func TestOpenOnlySecretIdEnvVarSetReturnsError(t *testing.T) {
 	unsetEnvVars(t)
 	defer unsetEnvVars(t)
-	err := os.Setenv(envvars.VaultSecretId, "some value")
+	err := os.Setenv(VaultSecretId, "some value")
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -350,12 +349,12 @@ func TestOpenApproleEnvVarsCreatesAuthenticatedClient(t *testing.T) {
 			unsetEnvVars(t)
 			defer unsetEnvVars(t)
 			roleId := "a role id"
-			err := os.Setenv(envvars.VaultRoleId, roleId)
+			err := os.Setenv(VaultRoleId, roleId)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
 			secretId := "a secret id"
-			err = os.Setenv(envvars.VaultSecretId, secretId)
+			err = os.Setenv(VaultSecretId, secretId)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
@@ -452,12 +451,12 @@ func TestOpenTokenEnvVarCreatesAuthenticatedClient(t *testing.T) {
 
 // unsetEnvVars unsets the vault authentication related environment variables.  To prevent previously ran tests from having an unwanted impact on later tests, it is recommended to call unsetEnvVars at the start of any tests which require the state of these environment variables to be known, and at the end of any tests which change the state of these environment variables.
 func unsetEnvVars(t *testing.T) {
-	if err := os.Unsetenv(envvars.VaultRoleId); err != nil {
-		t.Errorf("unable to unset %v: %v", envvars.VaultRoleId, err)
+	if err := os.Unsetenv(VaultRoleId); err != nil {
+		t.Errorf("unable to unset %v: %v", VaultRoleId, err)
 	}
 
-	if err := os.Unsetenv(envvars.VaultSecretId); err != nil {
-		t.Errorf("unable to unset %v: %v", envvars.VaultSecretId, err)
+	if err := os.Unsetenv(VaultSecretId); err != nil {
+		t.Errorf("unable to unset %v: %v", VaultSecretId, err)
 	}
 
 	if err := os.Unsetenv(api.EnvVaultToken); err != nil {
