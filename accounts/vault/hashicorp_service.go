@@ -58,7 +58,7 @@ func (a accountsByUrl) Swap(i, j int) {
 	a[i], a[j] = a[j], a[i]
 }
 
-func NewHashicorpService(clientConfig HashicorpClientConfig, secrets []HashicorpSecret) VaultService {
+func newHashicorpService(clientConfig HashicorpClientConfig, secrets []HashicorpSecret) vaultService {
 	return &hashicorpService{
 		clientFactory: defaultClientDelegateFactory,
 		clientConfig:  clientConfig,
@@ -74,7 +74,7 @@ const (
 	walletOpen = "Open, vault initialised and unsealed"
 )
 
-func (s *hashicorpService) status() (string, error) {
+func (s *hashicorpService) Status() (string, error) {
 	s.stateLock.RLock()
 	defer s.stateLock.RUnlock()
 
@@ -99,7 +99,7 @@ func (s *hashicorpService) status() (string, error) {
 	return walletOpen, nil
 }
 
-func (s *hashicorpService) isOpen() bool {
+func (s *hashicorpService) IsOpen() bool {
 	s.stateLock.RLock()
 	defer s.stateLock.RUnlock()
 
@@ -112,7 +112,7 @@ var (
 	approleAuthenticationErr = fmt.Errorf("both %q and %q environment variables must be set to use Approle authentication", envvars.VaultRoleId, envvars.VaultSecretId)
 )
 
-func (s *hashicorpService) open() error {
+func (s *hashicorpService) Open() error {
 	s.stateLock.Lock()
 	defer s.stateLock.Unlock()
 
@@ -166,8 +166,8 @@ func (s *hashicorpService) open() error {
 	return nil
 }
 
-func (s *hashicorpService) close() error {
-	if !s.isOpen() {
+func (s *hashicorpService) Close() error {
+	if !s.IsOpen() {
 		return nil
 	}
 
@@ -181,8 +181,8 @@ func (s *hashicorpService) close() error {
 	return nil
 }
 
-func (s *hashicorpService) getAccounts() ([]accounts.Account, []error) {
-	if status, err := s.status(); status == walletClosed {
+func (s *hashicorpService) GetAccounts() ([]accounts.Account, []error) {
+	if status, err := s.Status(); status == walletClosed {
 		return nil, []error{errors.New("Wallet closed")}
 	} else if err != nil {
 		return nil, []error{err}
@@ -283,7 +283,7 @@ func (s *hashicorpService) getAddress(secret HashicorpSecret) (common.Address, e
 	return common.HexToAddress(strAcct), nil
 } 
 
-func (s *hashicorpService) getPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error) {
+func (s *hashicorpService) GetPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error) {
 	s.stateLock.RLock()
 	defer s.stateLock.RUnlock()
 
@@ -345,7 +345,7 @@ func (s *hashicorpService) getPrivateKey(account accounts.Account) (*ecdsa.Priva
 	return key, nil
 }
 
-func (s *hashicorpService) store(key *ecdsa.PrivateKey) (common.Address, error) {
+func (s *hashicorpService) Store(key *ecdsa.PrivateKey) (common.Address, error) {
 	address := crypto.PubkeyToAddress(key.PublicKey)
 	addrHex := address.Hex()
 

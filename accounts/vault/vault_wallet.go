@@ -16,21 +16,21 @@ import (
 )
 
 type vaultWallet struct {
-	vault             VaultService // vault can only be written to in constructor, therefore do not need mutex lock to access.  The VaultService impl is expected to contain a mutex and lock/unlock as required.
-	url               accounts.URL
-	updateFeed        *event.Feed
-	stateLock         sync.RWMutex  // Protects read and write access to the wallet struct fields
-	accounts          []accounts.Account
+	vault      vaultService // vault can only be written to in constructor, therefore do not need mutex lock to access.  The vaultService impl is expected to contain a mutex and lock/unlock as required.
+	url        accounts.URL
+	updateFeed *event.Feed
+	stateLock  sync.RWMutex  // Protects read and write access to the wallet struct fields
+	accounts   []accounts.Account
 }
 
-type VaultService interface {
-	status() (string, error)
-	open() error
-	isOpen() bool
-	close() error
-	getAccounts() ([]accounts.Account, []error)
-	getPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error)
-	store(key *ecdsa.PrivateKey) (common.Address, error)
+type vaultService interface {
+	Status() (string, error)
+	Open() error
+	IsOpen() bool
+	Close() error
+	GetAccounts() ([]accounts.Account, []error)
+	GetPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error)
+	Store(key *ecdsa.PrivateKey) (common.Address, error)
 }
 
 func NewHashicorpVaultWallet(config HashicorpWalletConfig, updateFeed *event.Feed) (*vaultWallet, error) {
@@ -40,7 +40,7 @@ func NewHashicorpVaultWallet(config HashicorpWalletConfig, updateFeed *event.Fee
 		return &vaultWallet{}, err
 	}
 
-	s := NewHashicorpService(config.Client, config.Secrets)
+	s := newHashicorpService(config.Client, config.Secrets)
 
 	w := &vaultWallet{
 		vault: s,
@@ -56,7 +56,7 @@ func (w *vaultWallet) URL() accounts.URL {
 }
 
 func (w *vaultWallet) Status() (string, error) {
-	return w.vault.status()
+	return w.vault.Status()
 }
 
 // Open implements accounts.Wallet, creating an authenticated Client and making it accessible to the wallet to enable vault operations.
@@ -65,11 +65,11 @@ func (w *vaultWallet) Status() (string, error) {
 //
 // The passphrase arg is not used and this method does not retrieve any secrets from the vault.
 func (w *vaultWallet) Open(passphrase string) error {
-	if w.vault.isOpen() {
+	if w.vault.IsOpen() {
 		return accounts.ErrWalletAlreadyOpen
 	}
 
-	if err := w.vault.open(); err != nil {
+	if err := w.vault.Open(); err != nil {
 		return err
 	}
 
@@ -86,12 +86,12 @@ func (w *vaultWallet) Close() error {
 	w.accounts = nil
 	w.stateLock.Unlock()
 
-	return w.vault.close()
+	return w.vault.Close()
 }
 
 // Account implements accounts.Wallet, returning the accounts specified in config that are stored in the vault.  refreshAccounts() retrieves the list of accounts from the vault and so must have been called prior to this method in order to return a non-empty slice
 func (w *vaultWallet) Accounts() []accounts.Account {
-	accts, errs := w.vault.getAccounts()
+	accts, errs := w.vault.GetAccounts()
 
 	for _, err := range errs {
 		log.Warn("Error getting account from vault", "wallet", w.URL(), "err", err)
@@ -137,7 +137,7 @@ func (w *vaultWallet) SignHash(account accounts.Account, hash []byte) ([]byte, e
 		return nil, accounts.ErrUnknownAccount
 	}
 
-	key, err := w.vault.getPrivateKey(account)
+	key, err := w.vault.GetPrivateKey(account)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +151,7 @@ func (w *vaultWallet) SignTx(account accounts.Account, tx *types.Transaction, ch
 		return nil, accounts.ErrUnknownAccount
 	}
 
-	key, err := w.vault.getPrivateKey(account)
+	key, err := w.vault.GetPrivateKey(account)
 	if err != nil {
 		return nil, err
 	}

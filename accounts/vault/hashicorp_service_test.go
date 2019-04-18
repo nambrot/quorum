@@ -92,7 +92,7 @@ func TestAccountsByUrl(t *testing.T) {
 func TestStatusWalletClosedIfNilClient(t *testing.T) {
 	s := hashicorpService{}
 
-	status, err := s.status()
+	status, err := s.Status()
 
 	if status != walletClosed && err != nil {
 		t.Errorf("unexpected results\nwant: %v, %v\ngot : %v, %v", walletClosed, nil, status, err)
@@ -116,7 +116,7 @@ func TestStatusReturnsErrorIfUnableToPerformHealthcheck(t *testing.T) {
 
 	s := hashicorpService{client: mockClient}
 
-	status, err := s.status()
+	status, err := s.Status()
 
 	if status != healthcheckFailed && err != e {
 		t.Errorf("unexpected results\nwant: %v, %v\ngot : %v, %v", healthcheckFailed, e, status, err)
@@ -138,7 +138,7 @@ func TestStatusVaultUninitialised(t *testing.T) {
 
 	s := hashicorpService{client: mockClient}
 
-	status, err := s.status()
+	status, err := s.Status()
 
 	wantErr := errors.New(vaultUninitialised)
 
@@ -162,7 +162,7 @@ func TestStatusVaultSealed(t *testing.T) {
 
 	s := hashicorpService{client: mockClient}
 
-	status, err := s.status()
+	status, err := s.Status()
 
 	wantErr := errors.New(vaultSealed)
 
@@ -186,7 +186,7 @@ func TestStatusWalletOpen(t *testing.T) {
 
 	s := hashicorpService{client: mockClient}
 
-	status, err := s.status()
+	status, err := s.Status()
 
 	if status != walletOpen && err != nil {
 		t.Errorf("unexpected results\nwant: %v, %v\ngot : %v, %v", walletOpen, nil, status, err)
@@ -196,7 +196,7 @@ func TestStatusWalletOpen(t *testing.T) {
 func TestIsOpenTrueIfClientNonNil(t *testing.T) {
 	s := hashicorpService{client: mockClientDelegate{}}
 
-	if b := s.isOpen(); !b {
+	if b := s.IsOpen(); !b {
 		t.Errorf("unexpected result: want %v, got %v", true, b)
 	}
 }
@@ -204,7 +204,7 @@ func TestIsOpenTrueIfClientNonNil(t *testing.T) {
 func TestIsOpenFalseIfClientNil(t *testing.T) {
 	s := hashicorpService{}
 
-	if b := s.isOpen(); b {
+	if b := s.IsOpen(); b {
 		t.Errorf("unexpected result: want %v, got %v", false, b)
 	}
 }
@@ -221,7 +221,7 @@ func TestOpenErrorCreatingClientReturnsError(t *testing.T) {
 		clientFactory: mockClientDelegateFactory,
 	}
 
-	err := s.open()
+	err := s.Open()
 
 	if err != e {
 		t.Errorf("want: %v\ngot : %v", e, err)
@@ -246,7 +246,7 @@ func TestOpenErrorConfiguringClientReturnsError(t *testing.T) {
 		clientFactory: mockClientDelegateFactory,
 	}
 
-	err := s.open()
+	err := s.Open()
 
 	if err != e {
 		t.Errorf("want: %v\ngot : %v", e, err)
@@ -271,7 +271,7 @@ func TestOpenWithNoEnvVarsSetReturnsError(t *testing.T) {
 		clientFactory: mockClientDelegateFactory,
 	}
 
-	err := s.open()
+	err := s.Open()
 
 	if err != cannotAuthenticateErr {
 		t.Errorf("want: %v\ngot : %v", cannotAuthenticateErr, err)
@@ -301,7 +301,7 @@ func TestOpenOnlyRoleIdEnvVarSetReturnsError(t *testing.T) {
 		clientFactory: mockClientDelegateFactory,
 	}
 
-	err = s.open()
+	err = s.Open()
 
 	if err != approleAuthenticationErr {
 		t.Errorf("want: %v\ngot : %v", approleAuthenticationErr, err)
@@ -331,7 +331,7 @@ func TestOpenOnlySecretIdEnvVarSetReturnsError(t *testing.T) {
 		clientFactory: mockClientDelegateFactory,
 	}
 
-	err = s.open()
+	err = s.Open()
 
 	if err != approleAuthenticationErr {
 		t.Errorf("want: %v\ngot : %v", approleAuthenticationErr, err)
@@ -398,7 +398,7 @@ func TestOpenApproleEnvVarsCreatesAuthenticatedClient(t *testing.T) {
 				clientConfig: HashicorpClientConfig{Approle: test.configuredPath},
 			}
 
-			err = s.open()
+			err = s.Open()
 
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
@@ -434,8 +434,8 @@ func TestOpenTokenEnvVarCreatesAuthenticatedClient(t *testing.T) {
 	}
 
 	// we can use the constructor as we do not need to mock the client (the client uses the VAULT_TOKEN env var by default)
-	s := NewHashicorpService(HashicorpClientConfig{}, nil)
-	err = s.open()
+	s := newHashicorpService(HashicorpClientConfig{}, nil)
+	err = s.Open()
 
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -470,9 +470,9 @@ func TestCloseReturnsServiceToNewlyCreatedState(t *testing.T) {
 	secrets := []HashicorpSecret{
 		{Name: "somesecret"},
 	}
-	s := NewHashicorpService(clientConfig, secrets)
+	s := newHashicorpService(clientConfig, secrets)
 	// copy so we can compare to initial state
-	sCpy := NewHashicorpService(clientConfig, secrets)
+	sCpy := newHashicorpService(clientConfig, secrets)
 
 	// alter state of hashicorpService
 	hs := s.(*hashicorpService)
@@ -496,7 +496,7 @@ func TestCloseReturnsServiceToNewlyCreatedState(t *testing.T) {
 		t.Errorf("state of hashicorpService was not altered as part of test preparation\n%v", s)
 	}
 
-	err := s.close()
+	err := s.Close()
 
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -518,7 +518,7 @@ func TestCloseReturnsServiceToNewlyCreatedState(t *testing.T) {
 func TestGetAccountsReturnsErrorIfWalletClosed(t *testing.T) {
 	s := hashicorpService{}
 
-	accts, errs := s.getAccounts()
+	accts, errs := s.GetAccounts()
 
 	want := []error{
 		errors.New("Wallet closed"),
@@ -575,7 +575,7 @@ func TestGetAccountsErrorsAreReturnedAndDoNotStopFurtherRetrievalFromVault(t *te
 		client: mockClientDelegate,
 	}
 
-	accts, errs := s.getAccounts()
+	accts, errs := s.GetAccounts()
 
 	if len(accts) != 2 && len(errs) != 2 {
 		t.Errorf("unexpected result\nwant : %v accts and %v errors returned\ngot : %v accts and %v errors returned", 2, 2, len(accts), len(errs))
@@ -622,7 +622,7 @@ func TestGetPrivateKeyReturnsErrorIfAccountNotKnown(t *testing.T) {
 		Address: addr2,
 	}
 
-	k, err := s.getPrivateKey(acct2)
+	k, err := s.GetPrivateKey(acct2)
 
 	if !reflect.DeepEqual(*k, reflect.Zero(reflect.TypeOf(ecdsa.PrivateKey{})).Interface()) {
 		t.Errorf("want: %v\ngot : %v", ecdsa.PrivateKey{}, *k)
@@ -654,7 +654,7 @@ func TestGetPrivateKeyReturnsErrorIfDifferentUrl(t *testing.T) {
 		Address: addr,
 	}
 
-	k, err := s.getPrivateKey(acct2)
+	k, err := s.GetPrivateKey(acct2)
 
 	if !reflect.DeepEqual(*k, reflect.Zero(reflect.TypeOf(ecdsa.PrivateKey{})).Interface()) {
 		t.Errorf("want: %v\ngot : %v", ecdsa.PrivateKey{}, *k)
@@ -715,7 +715,7 @@ func TestGetPrivateKeyUsesAccountWithExactUrlIfProvided(t *testing.T) {
 	}
 	s := hashicorpService{acctSecretsByAddress: a, client: mockClientDelegate}
 
-	k, err := s.getPrivateKey(acct2)
+	k, err := s.GetPrivateKey(acct2)
 
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -779,7 +779,7 @@ func TestGetPrivateKeyUsesFirstAccountIfNoUrlProvided(t *testing.T) {
 	s := hashicorpService{acctSecretsByAddress: a, client: mockClientDelegate}
 
 	acct3 := accounts.Account{Address: addr}
-	k, err := s.getPrivateKey(acct3)
+	k, err := s.GetPrivateKey(acct3)
 
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -835,7 +835,7 @@ func TestStoreAddsKeyToFirstVaultSecret(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	addr, err := s.store(key)
+	addr, err := s.Store(key)
 
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)

@@ -69,7 +69,7 @@ func GenerateAndStore(config HashicorpWalletConfig) (common.Address, error) {
 	}
 	defer zeroKey(key)
 
-	address, err := w.vault.store(key)
+	address, err := w.vault.Store(key)
 	if err != nil {
 		return common.Address{}, err
 	}

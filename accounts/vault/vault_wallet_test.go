@@ -24,31 +24,31 @@ type mockVaultService struct {
 	getPrivateKeyMock func(account accounts.Account) (*ecdsa.PrivateKey, error)
 }
 
-func (m mockVaultService) status() (string, error) {
+func (m mockVaultService) Status() (string, error) {
 	return m.statusMock()
 }
 
-func (m mockVaultService) open() error {
+func (m mockVaultService) Open() error {
 	return m.openMock()
 }
 
-func (m mockVaultService) isOpen() bool {
+func (m mockVaultService) IsOpen() bool {
 	return m.isOpenMock()
 }
 
-func (m mockVaultService) close() error {
+func (m mockVaultService) Close() error {
 	return m.closeMock()
 }
 
-func (m mockVaultService) getAccounts() ([]accounts.Account, []error) {
+func (m mockVaultService) GetAccounts() ([]accounts.Account, []error) {
 	return m.getAccountsMock()
 }
 
-func (m mockVaultService) getPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error) {
+func (m mockVaultService) GetPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error) {
 	return m.getPrivateKeyMock(account)
 }
 
-func (m mockVaultService) store(key *ecdsa.PrivateKey) (common.Address, error) {
+func (m mockVaultService) Store(key *ecdsa.PrivateKey) (common.Address, error) {
 	panic("implement me")
 }
 
