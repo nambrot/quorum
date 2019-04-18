@@ -167,9 +167,7 @@ func (s *hashicorpService) Open() error {
 	// As using Approle is preferred over using the standalone token, an error will be returned if only one of these environment variables is set
 	roleId, rIdOk := os.LookupEnv(VaultRoleId)
 	secretId, sIdOk := os.LookupEnv(VaultSecretId)
-	t, tOk := os.LookupEnv(api.EnvVaultToken)
-
-	fmt.Println(t)
+	_, tOk := os.LookupEnv(api.EnvVaultToken)
 
 	if !(rIdOk || sIdOk || tOk) {
 		return cannotAuthenticateErr
