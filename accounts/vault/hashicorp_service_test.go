@@ -16,18 +16,18 @@ import (
 )
 
 type mockClientDelegate struct {
-	logicalMock func() logicalI
-	sysMock func() sysI
+	logicalMock func() logicalDelegate
+	sysMock func() sysDelegate
 	setAddressMock func(addr string) error
 	setTokenMock func(v string)
 	clearTokenMock func()
 }
 
-func (m mockClientDelegate) Logical() logicalI {
+func (m mockClientDelegate) Logical() logicalDelegate {
 	return m.logicalMock()
 }
 
-func (m mockClientDelegate) Sys() sysI {
+func (m mockClientDelegate) Sys() sysDelegate {
 	return m.sysMock()
 }
 
@@ -109,7 +109,7 @@ func TestStatusReturnsErrorIfUnableToPerformHealthcheck(t *testing.T) {
 	}
 
 	mockClient := mockClientDelegate{
-		sysMock: func() sysI {
+		sysMock: func() sysDelegate {
 			return mockSys
 		},
 	}
@@ -131,7 +131,7 @@ func TestStatusVaultUninitialised(t *testing.T) {
 	}
 
 	mockClient := mockClientDelegate{
-		sysMock: func() sysI {
+		sysMock: func() sysDelegate {
 			return mockSys
 		},
 	}
@@ -155,7 +155,7 @@ func TestStatusVaultSealed(t *testing.T) {
 	}
 
 	mockClient := mockClientDelegate{
-		sysMock: func() sysI {
+		sysMock: func() sysDelegate {
 			return mockSys
 		},
 	}
@@ -179,7 +179,7 @@ func TestStatusWalletOpen(t *testing.T) {
 	}
 
 	mockClient := mockClientDelegate{
-		sysMock: func() sysI {
+		sysMock: func() sysDelegate {
 			return mockSys
 		},
 	}
@@ -212,8 +212,8 @@ func TestIsOpenFalseIfClientNil(t *testing.T) {
 func TestOpenErrorCreatingClientReturnsError(t *testing.T) {
 	e := errors.New("an error")
 
-	var mockClientDelegateFactory clientFactory
-	mockClientDelegateFactory = func() (clientI, error) {
+	var mockClientDelegateFactory clientDelegateFactory
+	mockClientDelegateFactory = func() (clientDelegate, error) {
 		return mockClientDelegate{}, e
 	}
 
@@ -237,8 +237,8 @@ func TestOpenErrorConfiguringClientReturnsError(t *testing.T) {
 		},
 	}
 
-	var mockClientDelegateFactory clientFactory
-	mockClientDelegateFactory = func() (clientI, error) {
+	var mockClientDelegateFactory clientDelegateFactory
+	mockClientDelegateFactory = func() (clientDelegate, error) {
 		return mockClientDelegate, nil
 	}
 
@@ -262,8 +262,8 @@ func TestOpenWithNoEnvVarsSetReturnsError(t *testing.T) {
 		},
 	}
 
-	var mockClientDelegateFactory clientFactory
-	mockClientDelegateFactory = func() (clientI, error) {
+	var mockClientDelegateFactory clientDelegateFactory
+	mockClientDelegateFactory = func() (clientDelegate, error) {
 		return mockClientDelegate, nil
 	}
 
@@ -292,8 +292,8 @@ func TestOpenOnlyRoleIdEnvVarSetReturnsError(t *testing.T) {
 		},
 	}
 
-	var mockClientDelegateFactory clientFactory
-	mockClientDelegateFactory = func() (clientI, error) {
+	var mockClientDelegateFactory clientDelegateFactory
+	mockClientDelegateFactory = func() (clientDelegate, error) {
 		return mockClientDelegate, nil
 	}
 
@@ -322,8 +322,8 @@ func TestOpenOnlySecretIdEnvVarSetReturnsError(t *testing.T) {
 		},
 	}
 
-	var mockClientDelegateFactory clientFactory
-	mockClientDelegateFactory = func() (clientI, error) {
+	var mockClientDelegateFactory clientDelegateFactory
+	mockClientDelegateFactory = func() (clientDelegate, error) {
 		return mockClientDelegate, nil
 	}
 
@@ -380,7 +380,7 @@ func TestOpenApproleEnvVarsCreatesAuthenticatedClient(t *testing.T) {
 				setAddressMock: func(addr string) error {
 					return nil
 				},
-				logicalMock: func() logicalI {
+				logicalMock: func() logicalDelegate {
 					return mockLogicalDelegate
 				},
 				setTokenMock: func(v string) {
@@ -388,8 +388,8 @@ func TestOpenApproleEnvVarsCreatesAuthenticatedClient(t *testing.T) {
 				},
 			}
 
-			var mockClientDelegateFactory clientFactory
-			mockClientDelegateFactory = func() (clientI, error) {
+			var mockClientDelegateFactory clientDelegateFactory
+			mockClientDelegateFactory = func() (clientDelegate, error) {
 				return mockClientDelegate, nil
 			}
 
@@ -442,7 +442,7 @@ func TestOpenTokenEnvVarCreatesAuthenticatedClient(t *testing.T) {
 	}
 
 	hs := s.(*hashicorpService)
-	c := hs.client.(clientDelegate)
+	c := hs.client.(defaultClientDelegate)
 	got := c.Token()
 
 	if got != want {
@@ -562,10 +562,10 @@ func TestGetAccountsErrorsAreReturnedAndDoNotStopFurtherRetrievalFromVault(t *te
 		},
 	}
 	mockClientDelegate := mockClientDelegate{
-		logicalMock: func() logicalI {
+		logicalMock: func() logicalDelegate {
 			return mockLogicalDelegate
 		},
-		sysMock: func() sysI {
+		sysMock: func() sysDelegate {
 			return mockSysDelegate
 		},
 	}
@@ -709,7 +709,7 @@ func TestGetPrivateKeyUsesAccountWithExactUrlIfProvided(t *testing.T) {
 		},
 	}
 	mockClientDelegate := mockClientDelegate{
-		logicalMock: func() logicalI {
+		logicalMock: func() logicalDelegate {
 			return mockLogicalDelegate
 		},
 	}
@@ -772,7 +772,7 @@ func TestGetPrivateKeyUsesFirstAccountIfNoUrlProvided(t *testing.T) {
 		},
 	}
 	mockClientDelegate := mockClientDelegate{
-		logicalMock: func() logicalI {
+		logicalMock: func() logicalDelegate {
 			return mockLogicalDelegate
 		},
 	}
@@ -821,7 +821,7 @@ func TestStoreAddsKeyToFirstVaultSecret(t *testing.T) {
 		},
 	}
 	mockClientDelegate := mockClientDelegate{
-		logicalMock: func() logicalI {
+		logicalMock: func() logicalDelegate {
 			return mockLogicalDelegate
 		},
 	}

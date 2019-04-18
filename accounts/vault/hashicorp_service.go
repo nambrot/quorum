@@ -17,17 +17,17 @@ import (
 )
 
 type hashicorpService struct {
-	clientFactory clientFactory
-	secrets []HashicorpSecret
-	stateLock sync.RWMutex
-	clientConfig HashicorpClientConfig
-	client clientI
+	clientFactory        clientDelegateFactory
+	secrets              []HashicorpSecret
+	stateLock            sync.RWMutex
+	clientConfig         HashicorpClientConfig
+	client               clientDelegate
 	acctSecretsByAddress map[common.Address][]acctAndSecret // The same address may be provided in more than one way (e.g. by specifying v0 and a specific version which happens to be the latest version).  As a result multiple secrets may be defined for the same address
 }
 
-type clientFactory func() (clientI, error)
+type clientDelegateFactory func() (clientDelegate, error)
 
-func defaultClientFactory() (clientI, error) {
+func defaultClientDelegateFactory() (clientDelegate, error) {
 	conf := api.DefaultConfig()
 	client, err := api.NewClient(conf)
 
@@ -35,7 +35,7 @@ func defaultClientFactory() (clientI, error) {
 		return nil, err
 	}
 
-	return clientDelegate{client}, nil
+	return defaultClientDelegate{client}, nil
 }
 
 type acctAndSecret struct {
@@ -60,9 +60,9 @@ func (a accountsByUrl) Swap(i, j int) {
 
 func NewHashicorpService(clientConfig HashicorpClientConfig, secrets []HashicorpSecret) VaultService {
 	return &hashicorpService{
-		clientFactory: defaultClientFactory,
-		clientConfig: clientConfig,
-		secrets: secrets,
+		clientFactory: defaultClientDelegateFactory,
+		clientConfig:  clientConfig,
+		secrets:       secrets,
 	}
 }
 
