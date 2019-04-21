@@ -112,6 +112,8 @@ func (w *vaultWallet) Accounts() []accounts.Account {
 
 // Contains implements accounts.Wallet, returning whether a particular account is managed by this wallet.
 func (w *vaultWallet) Contains(account accounts.Account) bool {
+	w.Accounts()
+
 	w.stateLock.RLock()
 	defer w.stateLock.RUnlock()
 
