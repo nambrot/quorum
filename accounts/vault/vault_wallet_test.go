@@ -249,10 +249,16 @@ func TestContainsMatchesWithSameAddressAndUrl(t *testing.T) {
 	addr := common.StringToAddress("someaddress")
 	url := accounts.URL{Scheme: "http", Path: "client"}
 
-	accts := []accounts.Account{
-		{Address: addr, URL: url},
+	v := mockVaultService{
+		getAccountsMock: func() ([]accounts.Account, []error) {
+			accts := []accounts.Account{
+				{Address: addr, URL: url},
+			}
+
+			return accts, nil
+		},
 	}
-	w := vaultWallet{accounts: accts}
+	w := vaultWallet{vault: v}
 
 	toFind := accounts.Account{Address: addr, URL: url}
 
@@ -265,10 +271,16 @@ func TestContainsMatchesWithAddressOnlyIfNoUrlProvided(t *testing.T) {
 	addr := common.StringToAddress("someaddress")
 	url := accounts.URL{Scheme: "http", Path: "client"}
 
-	accts := []accounts.Account{
-		{Address: addr, URL: url},
+	v := mockVaultService{
+		getAccountsMock: func() ([]accounts.Account, []error) {
+			accts := []accounts.Account{
+				{Address: addr, URL: url},
+			}
+
+			return accts, nil
+		},
 	}
-	w := vaultWallet{accounts: accts}
+	w := vaultWallet{vault: v}
 
 	toFind := accounts.Account{Address: addr, URL: accounts.URL{}}
 
@@ -280,10 +292,16 @@ func TestContainsMatchesWithAddressOnlyIfNoUrlProvided(t *testing.T) {
 func TestContainsDoesNotMatchIfSameUrlButDifferentAddress(t *testing.T) {
 	url := accounts.URL{Scheme: "http", Path: "client"}
 
-	accts := []accounts.Account{
-		{Address: common.StringToAddress("someaddress"), URL: url},
+	v := mockVaultService{
+		getAccountsMock: func() ([]accounts.Account, []error) {
+			accts := []accounts.Account{
+				{Address: common.StringToAddress("someaddress"), URL: url},
+			}
+
+			return accts, nil
+		},
 	}
-	w := vaultWallet{accounts: accts}
+	w := vaultWallet{vault: v}
 
 	toFind := accounts.Account{Address: common.StringToAddress("anotheraddress"), URL: accounts.URL{}}
 
@@ -293,10 +311,16 @@ func TestContainsDoesNotMatchIfSameUrlButDifferentAddress(t *testing.T) {
 }
 
 func TestContainsDoesNotMatchIfDifferentUrlAndAddress(t *testing.T) {
-	accts := []accounts.Account{
-		{Address: common.StringToAddress("someaddress"), URL: accounts.URL{Scheme: "http", Path: "client"}},
+	v := mockVaultService{
+		getAccountsMock: func() ([]accounts.Account, []error) {
+			accts := []accounts.Account{
+				{Address: common.StringToAddress("someaddress"), URL: accounts.URL{Scheme: "http", Path: "client"}},
+			}
+
+			return accts, nil
+		},
 	}
-	w := vaultWallet{accounts: accts}
+	w := vaultWallet{vault: v}
 
 	toFind := accounts.Account{Address: common.StringToAddress("anotheraddress"), URL: accounts.URL{Scheme: "http", Path: "anotherclient"}}
 
@@ -306,11 +330,17 @@ func TestContainsDoesNotMatchIfDifferentUrlAndAddress(t *testing.T) {
 }
 
 func TestContainsMatchesWhenWalletContainsMoreThanOneAccount(t *testing.T) {
-	accts := []accounts.Account{
-		{Address: common.StringToAddress("someaddress"), URL: accounts.URL{Scheme: "http", Path: "client"}},
-		{Address: common.StringToAddress("anotheraddress"), URL: accounts.URL{Scheme: "http", Path: "anotherclient"}},
+	v := mockVaultService{
+		getAccountsMock: func() ([]accounts.Account, []error) {
+			accts := []accounts.Account{
+				{Address: common.StringToAddress("someaddress"), URL: accounts.URL{Scheme: "http", Path: "client"}},
+				{Address: common.StringToAddress("anotheraddress"), URL: accounts.URL{Scheme: "http", Path: "anotherclient"}},
+			}
+
+			return accts, nil
+		},
 	}
-	w := vaultWallet{accounts: accts}
+	w := vaultWallet{vault: v}
 
 	toFind := accounts.Account{Address: common.StringToAddress("anotheraddress"), URL: accounts.URL{Scheme: "http", Path: "anotherclient"}}
 
@@ -333,10 +363,16 @@ func TestDeriveNotSupported(t *testing.T) {
 }
 
 func TestSignHashReturnsErrorIfAccountNotKnownByWallet(t *testing.T) {
-	accts := []accounts.Account{
-		{Address: common.StringToAddress("someaddress"), URL: accounts.URL{Scheme: "http", Path: "someclient"}},
+	v := mockVaultService{
+		getAccountsMock: func() ([]accounts.Account, []error) {
+			accts := []accounts.Account{
+				{Address: common.StringToAddress("someaddress"), URL: accounts.URL{Scheme: "http", Path: "someclient"}},
+			}
+
+			return accts, nil
+		},
 	}
-	w := vaultWallet{accounts: accts}
+	w := vaultWallet{vault: v}
 
 	a := accounts.Account{Address: common.StringToAddress("anotheraddress"), URL: accounts.URL{Scheme: "http", Path: "anotherclient"}}
 
@@ -349,14 +385,18 @@ func TestSignHashReturnsErrorIfAccountNotKnownByWallet(t *testing.T) {
 
 func TestSignHashReturnsErrorIfUnableToRetrieveKeyFromVault(t *testing.T) {
 	e := errors.New("an error")
+	acct := accounts.Account{}
 	v := mockVaultService{
 		getPrivateKeyMock: func(account accounts.Account) (*ecdsa.PrivateKey, error) {
 			return nil, e
 		},
+		getAccountsMock: func() ([]accounts.Account, []error) {
+			accts := []accounts.Account{ acct }
+
+			return accts, nil
+		},
 	}
-	acct := accounts.Account{}
-	accts := []accounts.Account{ acct }
-	w := vaultWallet{vault: v, accounts: accts}
+	w := vaultWallet{vault: v}
 
 	toSign := make([]byte, 32)
 
@@ -373,15 +413,17 @@ func TestSignHashReturnsErrorIfUnableToRetrieveKeyFromVault(t *testing.T) {
 
 func TestSignHashSignsWithKeyThenKeyZeroed(t *testing.T) {
 	k, err := crypto.GenerateKey()
-
+	acct := accounts.Account{}
 	v := mockVaultService{
 		getPrivateKeyMock: func(account accounts.Account) (*ecdsa.PrivateKey, error) {
 			return k, nil
 		},
+		getAccountsMock: func() ([]accounts.Account, []error) {
+			accts := []accounts.Account{ acct }
+			return accts, nil
+		},
 	}
-	acct := accounts.Account{}
-	accts := []accounts.Account{ acct }
-	w := vaultWallet{vault: v, accounts: accts}
+	w := vaultWallet{vault: v}
 
 	toSign := make([]byte, 32)
 
@@ -409,10 +451,16 @@ func TestSignHashSignsWithKeyThenKeyZeroed(t *testing.T) {
 }
 
 func TestSignTxReturnsErrorIfAccountNotKnownByWallet(t *testing.T) {
-	accts := []accounts.Account{
-		{Address: common.StringToAddress("someaddress"), URL: accounts.URL{Scheme: "http", Path: "someclient"}},
+	v := mockVaultService{
+		getAccountsMock: func() ([]accounts.Account, []error) {
+			accts := []accounts.Account{
+				{Address: common.StringToAddress("someaddress"), URL: accounts.URL{Scheme: "http", Path: "someclient"}},
+			}
+
+			return accts, nil
+		},
 	}
-	w := vaultWallet{accounts: accts}
+	w := vaultWallet{vault: v}
 
 	a := accounts.Account{Address: common.StringToAddress("anotheraddress"), URL: accounts.URL{Scheme: "http", Path: "anotherclient"}}
 
@@ -425,14 +473,19 @@ func TestSignTxReturnsErrorIfAccountNotKnownByWallet(t *testing.T) {
 
 func TestSignTxReturnsErrorIfUnableToRetrieveKeyFromVault(t *testing.T) {
 	e := errors.New("an error")
+	acct := accounts.Account{}
+
 	v := mockVaultService{
 		getPrivateKeyMock: func(account accounts.Account) (*ecdsa.PrivateKey, error) {
 			return nil, e
 		},
+		getAccountsMock: func() ([]accounts.Account, []error) {
+			accts := []accounts.Account{ acct }
+
+			return accts, nil
+		},
 	}
-	acct := accounts.Account{}
-	accts := []accounts.Account{ acct }
-	w := vaultWallet{vault: v, accounts: accts}
+	w := vaultWallet{vault: v}
 
 	result, err := w.SignTx(acct, &types.Transaction{}, &big.Int{}, true)
 
@@ -447,19 +500,22 @@ func TestSignTxReturnsErrorIfUnableToRetrieveKeyFromVault(t *testing.T) {
 
 func TestSignTxUsesHomesteadSignerIfChainIdNilAndPublicTxThenZeroesKey(t *testing.T) {
 	k, err := crypto.GenerateKey()
-
 	if err != nil {
 		t.Errorf("unexpected error: %v" , err)
 	}
+	acct := accounts.Account{}
 
 	v := mockVaultService{
 		getPrivateKeyMock: func(account accounts.Account) (*ecdsa.PrivateKey, error) {
 			return k, nil
 		},
+		getAccountsMock: func() ([]accounts.Account, []error) {
+			accts := []accounts.Account{ acct }
+
+			return accts, nil
+		},
 	}
-	acct := accounts.Account{}
-	accts := []accounts.Account{ acct }
-	w := vaultWallet{vault: v, accounts: accts}
+	w := vaultWallet{vault: v}
 
 	var chainID *big.Int
 	chainID = nil
@@ -497,19 +553,22 @@ func TestSignTxUsesHomesteadSignerIfChainIdNilAndPublicTxThenZeroesKey(t *testin
 
 func TestSignTxUsesHomesteadSignerIfChainIdNilAndPrivateTxThenZeroesKey(t *testing.T) {
 	k, err := crypto.GenerateKey()
-
 	if err != nil {
 		t.Errorf("unexpected error: %v" , err)
 	}
+	acct := accounts.Account{}
 
 	v := mockVaultService{
 		getPrivateKeyMock: func(account accounts.Account) (*ecdsa.PrivateKey, error) {
 			return k, nil
 		},
+		getAccountsMock: func() ([]accounts.Account, []error) {
+			accts := []accounts.Account{ acct }
+
+			return accts, nil
+		},
 	}
-	acct := accounts.Account{}
-	accts := []accounts.Account{ acct }
-	w := vaultWallet{vault: v, accounts: accts}
+	w := vaultWallet{vault: v}
 
 	var chainID *big.Int
 	chainID = nil
@@ -548,19 +607,22 @@ func TestSignTxUsesHomesteadSignerIfChainIdNilAndPrivateTxThenZeroesKey(t *testi
 
 func TestSignTxUsesHomesteadSignerIfChainIdNonNilAndPrivateTxThenZeroesKey(t *testing.T) {
 	k, err := crypto.GenerateKey()
-
 	if err != nil {
 		t.Errorf("unexpected error: %v" , err)
 	}
+	acct := accounts.Account{}
 
 	v := mockVaultService{
 		getPrivateKeyMock: func(account accounts.Account) (*ecdsa.PrivateKey, error) {
 			return k, nil
 		},
+		getAccountsMock: func() ([]accounts.Account, []error) {
+			accts := []accounts.Account{ acct }
+
+			return accts, nil
+		},
 	}
-	acct := accounts.Account{}
-	accts := []accounts.Account{ acct }
-	w := vaultWallet{vault: v, accounts: accts}
+	w := vaultWallet{vault: v}
 
 	var chainID *big.Int
 	chainID = big.NewInt(1337)
@@ -599,19 +661,22 @@ func TestSignTxUsesHomesteadSignerIfChainIdNonNilAndPrivateTxThenZeroesKey(t *te
 
 func TestSignTxUsesEIP155SignerIfChainIdNonNilAndPublicTxThenZeroesKey(t *testing.T) {
 	k, err := crypto.GenerateKey()
-
 	if err != nil {
 		t.Errorf("unexpected error: %v" , err)
 	}
+	acct := accounts.Account{}
 
 	v := mockVaultService{
 		getPrivateKeyMock: func(account accounts.Account) (*ecdsa.PrivateKey, error) {
 			return k, nil
 		},
+		getAccountsMock: func() ([]accounts.Account, []error) {
+			accts := []accounts.Account{ acct }
+
+			return accts, nil
+		},
 	}
-	acct := accounts.Account{}
-	accts := []accounts.Account{ acct }
-	w := vaultWallet{vault: v, accounts: accts}
+	w := vaultWallet{vault: v}
 
 	var chainID *big.Int
 	chainID = big.NewInt(1337)
