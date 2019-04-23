@@ -304,11 +304,11 @@ func accountCreate(ctx *cli.Context) error {
 	utils.SetNodeConfig(ctx, &cfg.Node)
 
 	var address common.Address
-	var error error
+	var err error
 
 	//using local bool (not global) here as Vault CLI options are currently only defined on accountcmd
 	if(ctx.Bool(utils.HashicorpFlag.Name)) {
-		address, error = createAcctInHashicorpVault(cfg.Node.HashicorpVaults[0])
+		address, err = createAcctInHashicorpVault(cfg.Node.HashicorpVaults[0])
 	} else {
 		scryptN, scryptP, keydir, err := cfg.Node.AccountConfig()
 
@@ -318,11 +318,11 @@ func accountCreate(ctx *cli.Context) error {
 
 		password := getPassPhrase("Your new account is locked with a password. Please give a password. Do not forget this password.", true, 0, utils.MakePasswordList(ctx))
 
-		address, error = keystore.StoreKey(keydir, password, scryptN, scryptP)
+		address, err = keystore.StoreKey(keydir, password, scryptN, scryptP)
 	}
 
-	if error != nil {
-		utils.Fatalf("Failed to create account: %v", error)
+	if err != nil {
+		utils.Fatalf("Failed to create account: %v", err)
 	}
 	fmt.Printf("Address: {%x}\n", address)
 	return nil

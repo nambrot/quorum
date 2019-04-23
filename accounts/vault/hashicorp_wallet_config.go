@@ -7,7 +7,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/event"
-	"io"
 	"strconv"
 )
 
@@ -63,24 +62,16 @@ func GenerateAndStore(config HashicorpWalletConfig) (common.Address, error) {
 		return common.Address{}, fmt.Errorf("error creating Vault client, %v", status)
 	}
 
-	key, err := generateKey(rand.Reader)
+	key, err := ecdsa.GenerateKey(crypto.S256(), rand.Reader)
 	if err != nil {
 		return common.Address{}, err
 	}
 	defer zeroKey(key)
 
-	address, err := w.vault.Store(key)
+	address, err := w.Store(key)
 	if err != nil {
 		return common.Address{}, err
 	}
 
 	return address, nil
-}
-
-func generateKey(r io.Reader) (*ecdsa.PrivateKey, error) {
-	privateKeyECDSA, err := ecdsa.GenerateKey(crypto.S256(), r)
-	if err != nil {
-		return nil, err
-	}
-	return privateKeyECDSA, nil
 }

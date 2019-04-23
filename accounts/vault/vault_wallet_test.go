@@ -22,6 +22,7 @@ type mockVaultService struct {
 	closeMock func() error
 	getAccountsMock func() ([]accounts.Account, []error)
 	getPrivateKeyMock func(account accounts.Account) (*ecdsa.PrivateKey, error)
+	storeMock func(key *ecdsa.PrivateKey) (common.Address, error)
 }
 
 func (m mockVaultService) Status() (string, error) {
@@ -49,7 +50,7 @@ func (m mockVaultService) GetPrivateKey(account accounts.Account) (*ecdsa.Privat
 }
 
 func (m mockVaultService) Store(key *ecdsa.PrivateKey) (common.Address, error) {
-	panic("implement me")
+	return m.storeMock(key)
 }
 
 func TestConstructor(t *testing.T) {
@@ -712,4 +713,22 @@ func TestSignTxUsesEIP155SignerIfChainIdNonNilAndPublicTxThenZeroesKey(t *testin
 	}
 }
 
+func TestStore(t *testing.T) {
+	want := common.StringToAddress("anaddress")
+	v := mockVaultService{
+		storeMock: func(key *ecdsa.PrivateKey) (common.Address, error) {
+			return want, nil
+		},
+	}
+	w := vaultWallet{vault: v}
 
+	k := &ecdsa.PrivateKey{}
+	got, err := w.Store(k)
+
+	if got != want {
+		t.Errorf("incorrect address returned\nwant: %v\n got : %v", want, got)
+	}
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}

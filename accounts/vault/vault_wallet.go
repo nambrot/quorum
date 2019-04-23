@@ -173,6 +173,10 @@ func (w *vaultWallet) SignTxWithPassphrase(account accounts.Account, passphrase 
 	return w.SignTx(account, tx, chainID, true)
 }
 
+func (w *vaultWallet) Store(key *ecdsa.PrivateKey) (common.Address, error) {
+	return w.vault.Store(key)
+}
+
 // TODO Duplicated code from url.go
 // parseURL converts a user supplied URL into the accounts specific structure.
 func parseURL(url string) (accounts.URL, error) {
