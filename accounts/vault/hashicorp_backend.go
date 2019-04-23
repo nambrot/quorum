@@ -79,10 +79,6 @@ func (hb *hashicorpBackend) createWallets() []error {
 }
 
 func (hb *hashicorpBackend) Wallets() []accounts.Wallet {
-	// check connection to vault is still up before returning wallet
-	// update list of accounts in wallets to cover the instances where secrets have been updated/deleted
-	//hb.refreshWallets()
-
 	hb.stateLock.RLock()
 	defer hb.stateLock.RUnlock()
 	cpy := make([]accounts.Wallet, len(hb.wallets))

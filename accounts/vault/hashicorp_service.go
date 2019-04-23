@@ -226,7 +226,10 @@ func (s *hashicorpService) GetAccounts() ([]accounts.Account, []error) {
 	var errs []error
 
 	s.stateLock.RLock()
-	for _, secret := range s.secrets {
+	secrets := s.secrets
+	s.stateLock.RUnlock()
+
+	for _, secret := range secrets {
 		url, err := s.getAccountUrl(secret)
 
 		if err != nil {
@@ -246,7 +249,6 @@ func (s *hashicorpService) GetAccounts() ([]accounts.Account, []error) {
 		acctSecretsByAddress[addr] = append(acctSecretsByAddress[addr], acctSecret)
 		accts = append(accts, accounts.Account{Address: addr, URL: url})
 	}
-	s.stateLock.RUnlock()
 
 	s.stateLock.Lock()
 	s.acctSecretsByAddress = acctSecretsByAddress
@@ -312,7 +314,7 @@ func (s *hashicorpService) getAddress(secret HashicorpSecret) (common.Address, e
 	}
 
 	return common.HexToAddress(strAcct), nil
-} 
+}
 
 func (s *hashicorpService) GetPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error) {
 	s.stateLock.RLock()
