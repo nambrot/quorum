@@ -449,18 +449,203 @@ func TestOpenTokenEnvVarCreatesAuthenticatedClient(t *testing.T) {
 	}
 }
 
+type envVars struct {
+	prefixedApprole, prefixedRoleId, prefixedSecretId, prefixedToken, globalApprole, globalToken bool
+}
+var envVarTests = []struct {
+	name string
+	toSet envVars
+	isPrefixSetInConfig bool
+	wantToken string
+}{
+	{ name: "prefixed approle has highest precedence", toSet: envVars{prefixedApprole: true, prefixedToken: true, globalApprole: true, globalToken: true}, isPrefixSetInConfig: true,  wantToken: prefixedApproleTokenValue },
+	{ name: "prefixed token is used if prefixed approle env vars not set", toSet: envVars{prefixedApprole: false, prefixedToken: true, globalApprole: true, globalToken: true}, isPrefixSetInConfig: true,  wantToken: prefixedTokenValue },
+	{ name: "global approle is used if prefixed env vars not set", toSet: envVars{prefixedApprole: false, prefixedToken: false, globalApprole: true, globalToken: true}, isPrefixSetInConfig: false,  wantToken: globalApproleTokenValue },
+	{ name: "global token is used if no other env vars set", toSet: envVars{prefixedApprole: false, prefixedToken: false, globalApprole: false, globalToken: true}, isPrefixSetInConfig: false,  wantToken: globalTokenValue },
+}
+func TestOpenPrefixedAndGlobalEnvVarsPrecedence(t *testing.T) {
+	unsetEnvVars(t)
+	defer unsetEnvVars(t)
+	for _, test := range envVarTests {
+		t.Run(test.name, func(t *testing.T) {
+			unsetEnvVars(t)
+			setEnvVars(t, test.toSet)
+
+			mockLogicalDelegate := mockLogicalDelegate{
+				writeMock: func(path string, data map[string]interface{}) (*api.Secret, error) {
+					var token string
+
+					if data["role_id"] == prefixedRoleIdValue && data["secret_id"] == prefixedSecretIdValue {
+						token = prefixedApproleTokenValue
+					}
+
+					if data["role_id"] == globalRoleIdValue && data["secret_id"] == globalSecretIdValue {
+						token = globalApproleTokenValue
+					}
+
+					authResponse := api.Secret{Auth: &api.SecretAuth{ClientToken: token}}
+
+					return &authResponse, nil
+				},
+			}
+
+			// capture the SetToken() method's arg by storing it in this variable
+			var setTokenArg string
+			mockClientDelegate := mockClientDelegate{
+				setAddressMock: func(addr string) error {
+					return nil
+				},
+				logicalMock: func() logicalDelegate {
+					return mockLogicalDelegate
+				},
+				setTokenMock: func(v string) {
+					setTokenArg = v
+				},
+			}
+
+			var mockClientDelegateFactory clientDelegateFactory
+			mockClientDelegateFactory = func() (clientDelegate, error) {
+				return mockClientDelegate, nil
+			}
+
+			clientConfig := HashicorpClientConfig{}
+			if test.isPrefixSetInConfig {
+				clientConfig = HashicorpClientConfig{EnvVarPrefix: prefix}
+			}
+
+			s := hashicorpService{
+				clientFactory: mockClientDelegateFactory,
+				clientConfig: clientConfig,
+			}
+
+			err := s.Open()
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+
+			if setTokenArg != test.wantToken {
+				t.Errorf("incorrect token used\nwant: %v\ngot : %v", test.wantToken, setTokenArg)
+			}
+		})
+	}
+}
+
+var prefixApproleTests = []struct {
+	name string
+	toSet envVars
+	wantErr error
+}{
+	{ name: "error if prefix set in config but no prefix env vars set", toSet: envVars{prefixedApprole: false, prefixedToken: false, globalApprole: true, globalToken: true},  wantErr: cannotAuthenticatePrefixErr },
+	{ name: "error if prefix set in config but only approle role id env var set", toSet: envVars{prefixedRoleId: true, prefixedSecretId: false, prefixedToken: false, globalApprole: true, globalToken: true}, wantErr: approleAuthenticationPrefixErr },
+	{ name: "error if prefix set in config but only approle secret id env var set", toSet: envVars{prefixedRoleId: false, prefixedSecretId: true, prefixedToken: false, globalApprole: true, globalToken: true}, wantErr: approleAuthenticationPrefixErr},
+}
+func TestOpenErrorIfPrefixSetInConfigButNoPrefixEnvVarsSet(t *testing.T) {
+	unsetEnvVars(t)
+	defer unsetEnvVars(t)
+
+	for _, test := range prefixApproleTests {
+		t.Run(test.name, func(t *testing.T) {
+			unsetEnvVars(t)
+			setEnvVars(t, test.toSet)
+
+			mockClientDelegate := mockClientDelegate{
+				setAddressMock: func(addr string) error {
+					return nil
+				},
+			}
+
+			var mockClientDelegateFactory clientDelegateFactory
+			mockClientDelegateFactory = func() (clientDelegate, error) {
+				return mockClientDelegate, nil
+			}
+
+			clientConfig := HashicorpClientConfig{EnvVarPrefix: prefix}
+
+			s := hashicorpService{
+				clientFactory: mockClientDelegateFactory,
+				clientConfig:  clientConfig,
+			}
+
+			err := s.Open()
+
+			if err != test.wantErr {
+				t.Errorf("incorrect error\nwant: %v\ngot : %v", test.wantErr, err)
+			}
+		})
+	}
+}
+
+const (
+	prefix = "PREFIXED"
+
+	// prefixed env var keys
+	prefixedRoleId   = prefix + "_" + VaultRoleId
+	prefixedSecretId = prefix + "_"  + VaultSecretId
+	prefixedToken = prefix + "_"  + api.EnvVaultToken
+
+	// prefixed and global env var values to use when setting env vars for tests
+	prefixedRoleIdValue = "prefixed-role-id"
+	prefixedSecretIdValue = "prefixed-secret-id"
+	prefixedApproleTokenValue = "prefixed-approle-token"
+	prefixedTokenValue = "prefixed-token"
+
+	globalRoleIdValue = "global-role-id"
+	globalSecretIdValue = "global-secret-id"
+	globalApproleTokenValue = "global-approle-token"
+	globalTokenValue = "global-token"
+)
+// setEnvVars sets the corresponding environment variables for each combination marked as true in toSet
+func setEnvVars(t *testing.T, toSet envVars) {
+	unsetEnvVars(t)
+
+	if toSet.prefixedApprole {
+		setEnv(t, prefixedRoleId, prefixedRoleIdValue)
+		setEnv(t, prefixedSecretId, prefixedSecretIdValue)
+	}
+
+	if toSet.prefixedRoleId {
+		setEnv(t, prefixedRoleId, prefixedRoleIdValue)
+	}
+
+	if toSet.prefixedSecretId {
+		setEnv(t, prefixedSecretId, prefixedSecretIdValue)
+	}
+
+	if toSet.prefixedToken {
+		setEnv(t, prefixedToken, prefixedTokenValue)
+	}
+
+	if toSet.globalApprole {
+		setEnv(t, VaultRoleId, globalRoleIdValue)
+		setEnv(t, VaultSecretId, globalSecretIdValue)
+	}
+
+	if toSet.globalToken {
+		setEnv(t, api.EnvVaultToken, globalTokenValue)
+	}
+}
+
+func setEnv(t *testing.T, key, value string) {
+	err := os.Setenv(key, value)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 // unsetEnvVars unsets the vault authentication related environment variables.  To prevent previously ran tests from having an unwanted impact on later tests, it is recommended to call unsetEnvVars at the start of any tests which require the state of these environment variables to be known, and at the end of any tests which change the state of these environment variables.
 func unsetEnvVars(t *testing.T) {
-	if err := os.Unsetenv(VaultRoleId); err != nil {
-		t.Errorf("unable to unset %v: %v", VaultRoleId, err)
-	}
+	unsetEnv(t, VaultRoleId)
+	unsetEnv(t, VaultSecretId)
+	unsetEnv(t, api.EnvVaultToken)
+	unsetEnv(t, prefixedRoleId)
+	unsetEnv(t, prefixedSecretId)
+	unsetEnv(t, prefixedToken)
+}
 
-	if err := os.Unsetenv(VaultSecretId); err != nil {
-		t.Errorf("unable to unset %v: %v", VaultSecretId, err)
-	}
-
-	if err := os.Unsetenv(api.EnvVaultToken); err != nil {
-		t.Errorf("unable to unset %v: %v", api.EnvVaultToken, err)
+func unsetEnv(t *testing.T, key string) {
+	if err := os.Unsetenv(key); err != nil {
+		t.Errorf("unable to unset %v: %v", key, err)
 	}
 }
 

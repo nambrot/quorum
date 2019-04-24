@@ -141,15 +141,32 @@ const (
 
 var (
 	cannotAuthenticateErr = fmt.Errorf("Unable to authenticate client.  Set the %v and %v env vars to use AppRole authentication.  Set %v env var to use Token authentication", VaultRoleId, VaultSecretId, api.EnvVaultToken)
-
-	approleAuthenticationErr = fmt.Errorf("both %q and %q environment variables must be set to use Approle authentication", VaultRoleId, VaultSecretId)
+	approleAuthenticationErr = fmt.Errorf("both %v and %v environment variables must be set to use Approle authentication", VaultRoleId, VaultSecretId)
+	cannotAuthenticatePrefixErr = fmt.Errorf("Unable to authenticate client.  Env var prefix provided in Vault client config but prefixed env vars not set.  Set the <PREFIX>_%v and <PREFIX>_%v env vars to use AppRole authentication.  Set <PREFIX>_%v env var to use Token authentication", VaultRoleId, VaultSecretId, api.EnvVaultToken)
+	approleAuthenticationPrefixErr = fmt.Errorf("both <PREFIX>_%v and <PREFIX>_%v environment variables must be set to use Approle authentication", VaultRoleId, VaultSecretId)
 )
 
+// Open creates a Hashicorp Vault client and attempts to authenticate to the Vault defined in the client config using
+// credentials retrieved from environment variables.  The precedence of which environment variables are used is as follows.
+//
+// If an environment variable prefix is defined for the client then:
+//
+// 1. Use prefixed approle env vars to authenticate if found, else
+//
+// 2. Use prefixed token env var to authenticate if found, else
+//
+// 3. Return error
+//
+// If an environment variable prefix is not defined for the client then:
+//
+// 1. Use global approle env vars to authenticate if found, else
+//
+// 2. Use global token env var to authenticate if found, else
+//
+// 3. Return error
 func (s *hashicorpService) Open() error {
 	s.stateLock.Lock()
 	defer s.stateLock.Unlock()
-
-	// If the environment variable `VAULT_TOKEN` is present, the token will be automatically added to the created client
 
 	client, err := s.clientFactory()
 
@@ -163,11 +180,47 @@ func (s *hashicorpService) Open() error {
 
 	s.client = client
 
-	// If the roleID and secretID environment variables are present, these will be used to authenticate the client and replace the default VAULT_TOKEN value
-	// As using Approle is preferred over using the standalone token, an error will be returned if only one of these environment variables is set
+
+	prefix := s.clientConfig.EnvVarPrefix
+
+	if prefix != "" {
+		roleId, rIdOk := os.LookupEnv(prefix + "_" + VaultRoleId)
+		secretId, sIdOk := os.LookupEnv(prefix + "_" + VaultSecretId)
+		token, tOk := os.LookupEnv(prefix + "_" + api.EnvVaultToken)
+
+		if !(rIdOk || sIdOk || tOk) {
+			return cannotAuthenticatePrefixErr
+		}
+
+		if rIdOk != sIdOk {
+			return approleAuthenticationPrefixErr
+		}
+
+		if rIdOk && sIdOk {
+			authData := map[string]interface{} {"role_id": roleId, "secret_id": secretId}
+
+			if s.clientConfig.Approle == "" {
+				s.clientConfig.Approle = "approle"
+			}
+
+			authResponse, err := s.client.Logical().Write(fmt.Sprintf("auth/%s/login", s.clientConfig.Approle), authData)
+
+			if err != nil {
+				return err
+			}
+
+			token := authResponse.Auth.ClientToken
+			s.client.SetToken(token)
+		} else {
+			s.client.SetToken(token)
+		}
+
+		return nil
+	}
+
 	roleId, rIdOk := os.LookupEnv(VaultRoleId)
 	secretId, sIdOk := os.LookupEnv(VaultSecretId)
-	_, tOk := os.LookupEnv(api.EnvVaultToken)
+	token, tOk := os.LookupEnv(api.EnvVaultToken)
 
 	if !(rIdOk || sIdOk || tOk) {
 		return cannotAuthenticateErr
@@ -191,6 +244,8 @@ func (s *hashicorpService) Open() error {
 		}
 
 		token := authResponse.Auth.ClientToken
+		s.client.SetToken(token)
+	} else {
 		s.client.SetToken(token)
 	}
 
