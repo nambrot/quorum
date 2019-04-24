@@ -86,5 +86,9 @@ func GenerateAndStore(config HashicorpWalletConfig) (common.Address, error) {
 		return common.Address{}, err
 	}
 
+	if err := w.Close(); err != nil {
+		return address, errors.WithMessage(err, "unable to close Hashicorp Vault wallet")
+	}
+
 	return address, nil
 }
