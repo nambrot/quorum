@@ -15,6 +15,7 @@ import (
 	"sync"
 )
 
+// hashicorpService is a vaultService and defines the functionality required to read/write to a Hashicorp Vault
 type hashicorpService struct {
 	clientFactory        clientDelegateFactory
 	secrets              []HashicorpSecret
@@ -24,8 +25,12 @@ type hashicorpService struct {
 	acctSecretsByAddress map[common.Address][]acctAndSecret // The same address may be provided in more than one way (e.g. by specifying v0 and a specific version which happens to be the latest version).  As a result multiple secrets may be defined for the same address
 }
 
+// clientDelegateFactory defines a factory function to create a delegate for the client of the Hashicorp Vault api.  This has been defined to enable mocking of the client in testing.
+//
+// The defaultClientDelegateFactory should be used in most situations except where mocking of the client is required.  In this case, define a custom clientDelegateFactory to return a custom implementation of clientDelegate.
 type clientDelegateFactory func() (clientDelegate, error)
 
+// defaultClientDelegateFactory creates a clientDelegate using the default Hashicorp api configuration
 func defaultClientDelegateFactory() (clientDelegate, error) {
 	conf := api.DefaultConfig()
 	client, err := api.NewClient(conf)
@@ -37,6 +42,9 @@ func defaultClientDelegateFactory() (clientDelegate, error) {
 	return defaultClientDelegate{client}, nil
 }
 
+// clientDelegate is used to expose and act as a delegate for the methods of the Hashicorp Vault client api required by a the hashicorpService.  This is to enable mocking of the client when testing.
+//
+// defaultClientDelegate should be used in most situations except where mocking of the client is required.
 type clientDelegate interface {
 	Logical() logicalDelegate
 	Sys() sysDelegate
@@ -45,33 +53,41 @@ type clientDelegate interface {
 	ClearToken()
 }
 
+// logicalDelegate is used to expose and act as a delegate for the methods of the Hashicorp Vault logical api required by the hashicorpService.  This is to enable mocking of the logical type when testing.
 type logicalDelegate interface{
 	ReadWithData(path string, data map[string][]string) (*api.Secret, error)
 	Write(path string, data map[string]interface{}) (*api.Secret, error)
 }
 
+// sysDelegate is used to expose and act as a delegate for the methods of the Hashicorp Vault sys api required by the hashicorpService.  This is to enable mocking of the sys type when testing.
 type sysDelegate interface{
 	Health() (*api.HealthResponse, error)
 }
 
+// defaultClientDelegate is a clientDelegate which embeds the Hashicorp Vault client api.  Other than Logical() and Sys() (which also return delegates), the methods exposed by the clientDelegate interface behave in exactly the same way as the Vault client api type.
 type defaultClientDelegate struct {
 	*api.Client
 }
 
+// Logical implements vault.clientDelegate returning the Hashicorp Vault api Logical type as a logicalDelegate
 func (cd defaultClientDelegate) Logical() logicalDelegate {
 	return cd.Client.Logical()
 }
 
+// Sys implements vault.clientDelegate returning the Hashicorp Vault api Sys type as a sysDelegate
 func (cd defaultClientDelegate) Sys() sysDelegate {
 	return cd.Client.Sys()
 }
 
+// acctAndSecret stores a HashicorpSecret with its corresponding accounts.Account once retrieved from the Vault
 type acctAndSecret struct {
 	acct accounts.Account
 	secret HashicorpSecret
 }
 
 //TODO duplicated code from account_cache.go
+
+// accountsByUrl implements the sort interface to enable the sorting of a slice of accounts by their urls
 type accountsByUrl []accounts.Account
 
 func (a accountsByUrl) Len() int {
@@ -86,6 +102,7 @@ func (a accountsByUrl) Swap(i, j int) {
 	a[i], a[j] = a[j], a[i]
 }
 
+// newHashicorpService is the hashicorpService constructor.  The default clientFactory is defined (i.e. the default configuration as defined by the Hashicorp Vault client api)
 func newHashicorpService(clientConfig HashicorpClientConfig, secrets []HashicorpSecret) vaultService {
 	return &hashicorpService{
 		clientFactory: defaultClientDelegateFactory,
@@ -94,6 +111,7 @@ func newHashicorpService(clientConfig HashicorpClientConfig, secrets []Hashicorp
 	}
 }
 
+// A Hashicorp Vault status
 const (
 	walletClosed = "Closed"
 	vaultUninitialised = "Vault uninitialised"
@@ -102,6 +120,7 @@ const (
 	walletOpen = "Open, vault initialised and unsealed"
 )
 
+// Status implements vault.vaultService using the Hashicorp Vault health api to return a status message for the vault
 func (s *hashicorpService) Status() (string, error) {
 	s.stateLock.RLock()
 	defer s.stateLock.RUnlock()
@@ -127,6 +146,7 @@ func (s *hashicorpService) Status() (string, error) {
 	return walletOpen, nil
 }
 
+// IsOpen implements vault.vaultService and returns true if the vault client has been created
 func (s *hashicorpService) IsOpen() bool {
 	s.stateLock.RLock()
 	defer s.stateLock.RUnlock()
@@ -134,36 +154,46 @@ func (s *hashicorpService) IsOpen() bool {
 	return s.client != nil
 }
 
+// Environment variable to be to AppRole authentication credentials
 const (
 	VaultRoleId   = "VAULT_ROLE_ID"
 	VaultSecretId = "VAULT_SECRET_ID"
 )
 
+
 var (
+	// cannotAuthenticateErr is returned when the necessary environment variables have not been defined in order to authenticate to the Vault
 	cannotAuthenticateErr = fmt.Errorf("Unable to authenticate client.  Set the %v and %v env vars to use AppRole authentication.  Set %v env var to use Token authentication", VaultRoleId, VaultSecretId, api.EnvVaultToken)
+
+	// approleAuthenticationErr is returned when only one of the AppRole credential environment variables has been set.  Both are required in order to authenticate with the Vault using the AppRole auth method.
 	approleAuthenticationErr = fmt.Errorf("both %v and %v environment variables must be set to use Approle authentication", VaultRoleId, VaultSecretId)
+
+	// cannotAuthenticatePrefixErr is returned when an environment variable prefix has been defined for the vault client but the environment variables using that prefix, necessary to authenticate to the vault, have not been defined
 	cannotAuthenticatePrefixErr = fmt.Errorf("Unable to authenticate client.  Env var prefix provided in Vault client config but prefixed env vars not set.  Set the <PREFIX>_%v and <PREFIX>_%v env vars to use AppRole authentication.  Set <PREFIX>_%v env var to use Token authentication", VaultRoleId, VaultSecretId, api.EnvVaultToken)
+
+	// approleAuthenticationPrefixErr is returned when an environment variable prefix has been defined for the vault client but only one of the prefixed AppRole credential environment variables has been set.  Both are required in order to authenticate with the Vault using the AppRole auth method.
 	approleAuthenticationPrefixErr = fmt.Errorf("both <PREFIX>_%v and <PREFIX>_%v environment variables must be set to use Approle authentication", VaultRoleId, VaultSecretId)
 )
 
-// Open creates a Hashicorp Vault client and attempts to authenticate to the Vault defined in the client config using
-// credentials retrieved from environment variables.  The precedence of which environment variables are used is as follows.
+// Open implements vault.vaultService to create a Hashicorp Vault client and authenticate that client to the Vault defined in the client config.  Authentication credentials are retrieved from environment variables.  The environment variables are checked as follows.
 //
 // If an environment variable prefix is defined for the client then:
 //
-// 1. Use prefixed approle env vars to authenticate if found, else
+// 1. Use prefixed approle env vars to authenticate, else
 //
-// 2. Use prefixed token env var to authenticate if found, else
+// 2. Use prefixed token env var to authenticate, else
 //
 // 3. Return error
 //
 // If an environment variable prefix is not defined for the client then:
 //
-// 1. Use global approle env vars to authenticate if found, else
+// 1. Use global approle env vars to authenticate, else
 //
-// 2. Use global token env var to authenticate if found, else
+// 2. Use global token env var to authenticate, else
 //
 // 3. Return error
+//
+// If an error is encountered during the AppRole authentication this will be returned.  If an incorrect token is provided, this will not be detected until a request is made to read/write to the vault.
 func (s *hashicorpService) Open() error {
 	s.stateLock.Lock()
 	defer s.stateLock.Unlock()
@@ -252,6 +282,7 @@ func (s *hashicorpService) Open() error {
 	return nil
 }
 
+// Close implements vault.vaultService to clear the state of the service by removing the client, client token and stored accounts
 func (s *hashicorpService) Close() error {
 	if !s.IsOpen() {
 		return nil
@@ -267,6 +298,9 @@ func (s *hashicorpService) Close() error {
 	return nil
 }
 
+// GetAccounts implements vault.vaultService to retrieve the corresponding accounts for the HashicorpSecrets managed by the service.  If an account cannot be retrieved for a particular secret, the error is stored to be returned later and retrieval is attempted for the remaining secrets.
+//
+// The account address is retrieved directly from the vault.  The account url is determined from the secret config.  The returned account slice will be sorted alphabetically by url.
 func (s *hashicorpService) GetAccounts() ([]accounts.Account, []error) {
 	if status, err := s.Status(); status == walletClosed {
 		return nil, []error{errors.New("Wallet closed")}
@@ -277,7 +311,6 @@ func (s *hashicorpService) GetAccounts() ([]accounts.Account, []error) {
 	acctSecretsByAddress := make(map[common.Address][]acctAndSecret)
 	var accts []accounts.Account
 
-	// If a secret is not found in the vault we want to continue checking the other secrets before returning from this func
 	var errs []error
 
 	s.stateLock.RLock()
@@ -314,6 +347,7 @@ func (s *hashicorpService) GetAccounts() ([]accounts.Account, []error) {
 	return accts, errs
 }
 
+// getAccountUrl creates the url for a particular HashicorpSecret, including the secret name, secret engine name, and version.  This url can be used to with the Hashicorp Vault HTTP api to retrieve the secret values.
 func (s *hashicorpService) getAccountUrl(secret HashicorpSecret) (accounts.URL, error) {
 	path, _, err := secret.toRequestData()
 
@@ -334,6 +368,7 @@ func (s *hashicorpService) getAccountUrl(secret HashicorpSecret) (accounts.URL, 
 	return url, nil
 }
 
+// getAddress retrieves the common.Address for a HashicorpSecret from the Vault.  The hex representation of the address is retrieved from the Vault and converted to the common.Address type.
 func (s *hashicorpService) getAddress(secret HashicorpSecret) (common.Address, error) {
 	path, queryParams, err := secret.toRequestData()
 
@@ -342,6 +377,7 @@ func (s *hashicorpService) getAddress(secret HashicorpSecret) (common.Address, e
 	}
 
 	s.stateLock.RLock()
+	//TODO reliably zero this response and all values extracted from it once account has been retrieved
 	vaultResponse, err := s.client.Logical().ReadWithData(path, queryParams)
 	s.stateLock.RUnlock()
 
@@ -371,6 +407,9 @@ func (s *hashicorpService) getAddress(secret HashicorpSecret) (common.Address, e
 	return common.HexToAddress(strAcct), nil
 }
 
+// GetPrivateKey implements vault.vaultService to retrieve the private key for a particular account from the Vault.
+//
+// Where possible the bytes of the key should be zeroed after use to prevent private data persisting in memory
 func (s *hashicorpService) GetPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error) {
 	s.stateLock.RLock()
 	defer s.stateLock.RUnlock()
@@ -381,7 +420,7 @@ func (s *hashicorpService) GetPrivateKey(account accounts.Account) (*ecdsa.Priva
 		return &ecdsa.PrivateKey{}, accounts.ErrUnknownAccount
 	}
 
-	// if provided account has empty url then take first acct found for this address, else search for acct from vault that has the same url
+	// if the provided account has an empty url then take the first secret found for this account address, else search for the secret corresponding to an account that has the same url
 	var secret HashicorpSecret
 	for _, as := range acctAndSecrets {
 		if account.URL == (accounts.URL{}) || account.URL == as.acct.URL {
@@ -433,6 +472,7 @@ func (s *hashicorpService) GetPrivateKey(account accounts.Account) (*ecdsa.Priva
 	return key, nil
 }
 
+// Store implements vault.vaultService to store the provided private key in the vault.  The key is stored in the first secret in the service's HashicorpSecret slice.  The values stored in the vault are the hex representation of the account address (derived from the private key) and the hex representation of the private key
 func (s *hashicorpService) Store(key *ecdsa.PrivateKey) (common.Address, error) {
 	address := crypto.PubkeyToAddress(key.PublicKey)
 	addrHex := address.Hex()

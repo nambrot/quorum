@@ -67,8 +67,6 @@ func (hb *hashicorpBackend) createWallets() []error {
 			}
 
 			wallets = append(wallets, w)
-
-			//TODO create goroutine to periodically check vault for changes
 		}
 
 		sort.Sort(walletsByUrl(wallets))
@@ -78,6 +76,7 @@ func (hb *hashicorpBackend) createWallets() []error {
 	return errs
 }
 
+// Wallets implements accounts.Backend, returning a copy of all Vault wallets managed by the backend
 func (hb *hashicorpBackend) Wallets() []accounts.Wallet {
 	hb.stateLock.RLock()
 	defer hb.stateLock.RUnlock()
@@ -87,12 +86,11 @@ func (hb *hashicorpBackend) Wallets() []accounts.Wallet {
 	return cpy
 }
 
+// Subscribe implements accounts.Backend subscribing the given channel to all Vault wallet events
 func (hb *hashicorpBackend) Subscribe(sink chan<- accounts.WalletEvent) event.Subscription {
-	// We need the mutex to reliably start/stop the update loop
 	hb.stateLock.Lock()
 	defer hb.stateLock.Unlock()
 
-	// Subscribe the caller and track the subscriber count
 	sub := hb.updateScope.Track(hb.updateFeed.Subscribe(sink))
 
 	return sub

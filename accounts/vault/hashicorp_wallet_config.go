@@ -7,14 +7,17 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/pkg/errors"
 	"strconv"
 )
 
+// HashicorpWalletConfig defines the configuration values required to create a client for the Vault and to define the secrets that should be read from/written to
 type HashicorpWalletConfig struct {
 	Client HashicorpClientConfig `toml:",omitempty"`
 	Secrets    []HashicorpSecret     `toml:",omitempty"`
 }
 
+// HashicorpClientConfig defines the configuration values required by the vaultWallet to create a client to the Hashicorp Vault
 type HashicorpClientConfig struct {
 	Url          string `toml:",omitempty"`
 	Approle      string `toml:",omitempty"`
@@ -24,6 +27,7 @@ type HashicorpClientConfig struct {
 	EnvVarPrefix string `toml:",omitempty"`
 }
 
+// HashicorpSecret defines the configuration values required to read/write to a secret stored in a Hashicorp Vault
 type HashicorpSecret struct {
 	Name         string `toml:",omitempty"`
 	SecretEngine string `toml:",omitempty"`
@@ -32,10 +36,15 @@ type HashicorpSecret struct {
 	KeyID        string `toml:",omitempty"`
 }
 
-func (s HashicorpSecret) toRequestData() (string, map[string][]string, error) {
-	path := fmt.Sprintf("%s/data/%s", s.SecretEngine, s.Name)
+// toRequestData converts the fields of a HashicorpSecret into the relevant formats required to make a read/write request to the vault
+//
+// path defines URL path made up of the secret name and secret engine name
+//
+// queryParams includes the version of the secret
+func (s HashicorpSecret) toRequestData() (path string, queryParams map[string][]string, err error) {
+	path = fmt.Sprintf("%s/data/%s", s.SecretEngine, s.Name)
 
-	queryParams := make(map[string][]string)
+	queryParams = make(map[string][]string)
 	if s.Version < 0 {
 		return "", nil, fmt.Errorf("Hashicorp Vault secret version must be integer >= 0")
 	}
@@ -44,6 +53,9 @@ func (s HashicorpSecret) toRequestData() (string, map[string][]string, error) {
 	return path, queryParams, nil
 }
 
+// GenerateAndStore creates and opens a new HashicorpVaultWallet from the provided config, generates a secp256k1 key and stores the key in the vault defined in the provided config.
+//
+// The length of the HashicorpSecret slice in the config should be 1 as the generated key will be stored in only this secret.  Any other secrets will be ignored.
 func GenerateAndStore(config HashicorpWalletConfig) (common.Address, error) {
 	w, err := NewHashicorpVaultWallet(config, &event.Feed{})
 

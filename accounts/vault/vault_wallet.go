@@ -15,6 +15,9 @@ import (
 	"sync"
 )
 
+// vaultWallet is an accounts.Wallet and is used to retrieve accounts from a vault and sign tx/data with those accounts.
+//
+// The common functionality shared between all vault wallet types is encapsulated by this type.  A vaultService is used to provide the vault-specific logic for reading and writing.
 type vaultWallet struct {
 	vault      vaultService // vault can only be written to in constructor, therefore do not need mutex lock to access.  The vaultService impl is expected to contain a mutex and lock/unlock as required.
 	url        accounts.URL
@@ -23,6 +26,7 @@ type vaultWallet struct {
 	accounts   []accounts.Account
 }
 
+// vaultService defines the vendor specific functionality vault wallets must implement to allow them to be used for account retrieval and creation
 type vaultService interface {
 	Status() (string, error)
 	Open() error
@@ -33,6 +37,7 @@ type vaultService interface {
 	Store(key *ecdsa.PrivateKey) (common.Address, error)
 }
 
+// NewHashicorpVaultWallet creates a new instance of a vaultWallet containing a hashicorpService
 func NewHashicorpVaultWallet(config HashicorpWalletConfig, updateFeed *event.Feed) (*vaultWallet, error) {
 	url, err := parseURL(config.Client.Url)
 
@@ -51,17 +56,17 @@ func NewHashicorpVaultWallet(config HashicorpWalletConfig, updateFeed *event.Fee
 	return w, nil
 }
 
+// URL implements accounts.Wallet returning the URL of the Vault server
 func (w *vaultWallet) URL() accounts.URL {
 	return w.url
 }
 
+// Status implements accounts.Wallet returning a custom status message from the underlying vendor-specific vaultService implementation
 func (w *vaultWallet) Status() (string, error) {
 	return w.vault.Status()
 }
 
-// Open implements accounts.Wallet, creating an authenticated Client and making it accessible to the wallet to enable vault operations.
-//
-// If Approle credentials have been provided these will be used to authenticate the Client with the vault, else the Token will be used.
+// Open implements accounts.Wallet creating an authenticated vault client to enable vault operations on the wallet.  An error will be returned if the wallet is already open.
 //
 // The passphrase arg is not used and this method does not retrieve any secrets from the vault.
 func (w *vaultWallet) Open(passphrase string) error {
@@ -80,7 +85,7 @@ func (w *vaultWallet) Open(passphrase string) error {
 	return nil
 }
 
-// Close implements accounts.Wallet, clearing the state of the wallet and removing the vault Client so vault operations can no longer be carried out.
+// Close implements accounts.Wallet, clearing the state of the wallet so that vault operations can no longer be carried out
 func (w *vaultWallet) Close() error {
 	w.stateLock.Lock()
 	w.accounts = nil
@@ -89,7 +94,7 @@ func (w *vaultWallet) Close() error {
 	return w.vault.Close()
 }
 
-// Account implements accounts.Wallet, returning the accounts specified in config that are stored in the vault.  refreshAccounts() retrieves the list of accounts from the vault and so must have been called prior to this method in order to return a non-empty slice
+// Account implements accounts.Wallet, returning a copy of the list of accounts managed by the wallet.  The vault is queried to ensure an up to date list of accounts is returned.
 func (w *vaultWallet) Accounts() []accounts.Account {
 	accts, errs := w.vault.GetAccounts()
 
@@ -110,7 +115,7 @@ func (w *vaultWallet) Accounts() []accounts.Account {
 	return cpy
 }
 
-// Contains implements accounts.Wallet, returning whether a particular account is managed by this wallet.
+// Contains implements accounts.Wallet, returning whether a particular account is managed by this wallet.  The vault is queried to ensure an up to date list of accounts is returned.
 func (w *vaultWallet) Contains(account accounts.Account) bool {
 	w.Accounts()
 
@@ -126,14 +131,15 @@ func (w *vaultWallet) Contains(account accounts.Account) bool {
 	return false
 }
 
-// Derive implements accounts.Wallet, but is a noop for Vault wallets since these have no notion of hierarchical account derivation.
+// Derive implements accounts.Wallet, but is a noop for vault wallets since these have no notion of hierarchical account derivation.
 func (*vaultWallet) Derive(path accounts.DerivationPath, pin bool) (accounts.Account, error) {
 	return accounts.Account{}, accounts.ErrNotSupported
 }
 
-// SelfDerive implements accounts.Wallet, but is a noop for Vault wallets since these have no notion of hierarchical account derivation.
+// SelfDerive implements accounts.Wallet, but is a noop for vault wallets since these have no notion of hierarchical account derivation.
 func (w *vaultWallet) SelfDerive(base accounts.DerivationPath, chain ethereum.ChainStateReader) {}
 
+// SignHash implements accounts.Wallet attempting to sign the given hash with the given account.  An error is returned if the account is not managed by the wallet or the account's private key is unable to be retrived from the vault.
 func (w *vaultWallet) SignHash(account accounts.Account, hash []byte) ([]byte, error) {
 	if !w.Contains(account) {
 		return nil, accounts.ErrUnknownAccount
@@ -148,6 +154,7 @@ func (w *vaultWallet) SignHash(account accounts.Account, hash []byte) ([]byte, e
 	return crypto.Sign(hash, key)
 }
 
+// SignTx implements accounts.Wallet attempting to sign the given transaction with the given account.  An error is returned if the account is not managed by the wallet or the account's private key is unable to be retrived from the vault.
 func (w *vaultWallet) SignTx(account accounts.Account, tx *types.Transaction, chainID *big.Int, isQuorum bool) (*types.Transaction, error) {
 	if !w.Contains(account) {
 		return nil, accounts.ErrUnknownAccount
@@ -165,14 +172,21 @@ func (w *vaultWallet) SignTx(account accounts.Account, tx *types.Transaction, ch
 	return types.SignTx(tx, types.HomesteadSigner{}, key)
 }
 
+// SignHashWithPassphrase implements accounts.Wallet attempting to sign the given hash with the given account.  An error is returned if the account is not managed by the wallet or the account's private key is unable to be retrived from the vault.
+//
+// The passphrase is not used for vault wallets and so this is equivalent to calling SignHash
 func (w *vaultWallet) SignHashWithPassphrase(account accounts.Account, passphrase string, hash []byte) ([]byte, error) {
 	return w.SignHash(account, hash)
 }
 
+// SignTx implements accounts.Wallet attempting to sign the given transaction with the given account.  An error is returned if the account is not managed by the wallet or the account's private key is unable to be retrived from the vault.
+//
+// The passphrase is not used for vault wallets and so this is equivalent to calling SignTxWithPassphrase
 func (w *vaultWallet) SignTxWithPassphrase(account accounts.Account, passphrase string, tx *types.Transaction, chainID *big.Int) (*types.Transaction, error) {
 	return w.SignTx(account, tx, chainID, true)
 }
 
+// Store uses the underlying vendor-specific implementation of vaultService to store the given private key in the wallet's vault.  The values stored in the vault are the hex representation of the key and the hex address - the format of this data depends on the vault type.
 func (w *vaultWallet) Store(key *ecdsa.PrivateKey) (common.Address, error) {
 	return w.vault.Store(key)
 }
