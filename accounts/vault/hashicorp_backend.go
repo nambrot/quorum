@@ -16,7 +16,7 @@ type hashicorpBackend struct {
 	wallets []accounts.Wallet // A vault wallet contains all account keys stored in that particular vault and accessible with a particular auth token
 	updateFeed event.Feed
 	updateScope event.SubscriptionScope
-	hashicorpConfigs []HashicorpWalletConfig
+	walletConfigs []HashicorpWalletConfig
 }
 
 // walletsByUrl implements the sort interface to enable the sorting of a slice of wallets by their urls
@@ -37,7 +37,7 @@ func (w walletsByUrl) Swap(i, j int) {
 // NewHashicorpBackend is the hashicorpBackend constructor and initialises the new backend by creating a wallet for each the provided walletConfigs.
 // The wallets are not opened and no secrets are retrieved from the vault.
 func NewHashicorpBackend(walletConfigs []HashicorpWalletConfig) *hashicorpBackend {
-	hb := &hashicorpBackend{hashicorpConfigs: walletConfigs}
+	hb := &hashicorpBackend{walletConfigs: walletConfigs}
 	errs := hb.createWallets()
 
 	for err := range errs {
@@ -59,10 +59,10 @@ func (hb *hashicorpBackend) createWallets() []error {
 	// The wallets for the keystore and hub backends can change frequently (e.g. files created/deleted in datadir, or USB devices connected/disconnected).  The Vault wallet configs can only be provided at startup - if the vault backend already has wallets then they do not need to be created again.
 	// If there is an error creating the wallet for a particular config, the error is stored and the other wallets are attempted to be created.  All errors are then returned.
 	if len(hb.wallets) == 0 {
-		for _, hc := range hb.hashicorpConfigs {
-			w, err := NewHashicorpVaultWallet(hc, &hb.updateFeed)
+		for _, conf := range hb.walletConfigs {
+			w, err := NewHashicorpVaultWallet(conf, &hb.updateFeed)
 			if err != nil {
-				errs = append(errs, errors.WithMessage(err, fmt.Sprintf("For Hashicorp client config with url %v", hc.Client.Url)))
+				errs = append(errs, errors.WithMessage(err, fmt.Sprintf("For Hashicorp client config with url %v", conf.Client.Url)))
 				continue
 			}
 
