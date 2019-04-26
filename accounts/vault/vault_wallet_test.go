@@ -77,7 +77,7 @@ func TestConstructor(t *testing.T) {
 	}
 }
 
-func TestConstructorInvalidUrlDoesNotCreateWallet(t *testing.T) {
+func TestConstructorMalformedUrlDoesNotCreateWallet(t *testing.T) {
 	var f *event.Feed
 	client := HashicorpClientConfig{Url: "noscheme"}
 	c := HashicorpWalletConfig{Client: client}
@@ -88,8 +88,24 @@ func TestConstructorInvalidUrlDoesNotCreateWallet(t *testing.T) {
 		t.Errorf("returned wallet is not zero value\nwant: %v\ngot : %v", vaultWallet{}, *w)
 	}
 
-	if err == nil {
-		t.Errorf("expected error due to incorrect formatting of url")
+	if err != malformedUrlErr {
+		t.Errorf("want error: %v\ngot error: %v", malformedUrlErr, err)
+	}
+}
+
+func TestConstructorNoUrlDoesNotCreateWallet(t *testing.T) {
+	var f *event.Feed
+	client := HashicorpClientConfig{}
+	c := HashicorpWalletConfig{Client: client}
+
+	w, err := NewHashicorpVaultWallet(c, f)
+
+	if reflect.DeepEqual(*w, reflect.Zero(reflect.TypeOf(vaultWallet{}))) {
+		t.Errorf("returned wallet is not zero value\nwant: %v\ngot : %v", vaultWallet{}, *w)
+	}
+
+	if err != noUrlErr {
+		t.Errorf("want error: %v\ngot error: %v", noUrlErr, err)
 	}
 }
 

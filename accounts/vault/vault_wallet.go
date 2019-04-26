@@ -191,12 +191,21 @@ func (w *vaultWallet) Store(key *ecdsa.PrivateKey) (common.Address, error) {
 	return w.vault.Store(key)
 }
 
-// TODO Duplicated code from url.go
+var (
+	noUrlErr = errors.New("no vault wallet url provided")
+	malformedUrlErr = errors.New("protocol scheme missing")
+)
+
 // parseURL converts a user supplied URL into the accounts specific structure.
 func parseURL(url string) (accounts.URL, error) {
+	if url == "" {
+		return accounts.URL{}, noUrlErr
+	}
+
+	// TODO Duplicated code from url.go
 	parts := strings.Split(url, "://")
 	if len(parts) != 2 || parts[0] == "" {
-		return accounts.URL{}, errors.New("protocol scheme missing")
+		return accounts.URL{}, malformedUrlErr
 	}
 	return accounts.URL {
 		Scheme: parts[0],
